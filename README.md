@@ -4,10 +4,10 @@ A Python library for creating AI bots for AIA's game collection. This library al
 
 ## Installation
 
-This library requires Python 3.7+. Simply place the `SlimeGameLibrary` folder in your project directory and import it:
+This library requires Python 3.7+. Simply place the `AIGameLibrary` folder in your project directory and import it:
 
 ```python
-from SlimeGameLibrary import *
+from AIGameLibrary import *
 ```
 
 ## Quick Start
@@ -15,7 +15,7 @@ from SlimeGameLibrary import *
 Here's a simple example for Slime Volleyball:
 
 ```python
-from SlimeGameLibrary import *
+from AIGameLibrary import *
 
 # Initialize the slime with name, color, country, and stats (speed, acceleration, jump)
 InitializeSlime("AIA", "Yellow", "United States of America", 5, 3, 2)
@@ -73,7 +73,8 @@ scaled = offset * 0.5
 
 ### General Nodes (Available in All Games)
 
-#### Basic Types
+<details>
+<summary><strong>Basic Types</strong></summary>
 
 - **`Float(value)`** - Creates a float constant node
   - Input: `value` (int, float, or str)
@@ -87,7 +88,10 @@ scaled = offset * 0.5
   - Input: `value` (str)
   - Output: String
 
-#### Arithmetic Operations
+</details>
+
+<details>
+<summary><strong>Arithmetic Operations</strong></summary>
 
 - **`AddFloats(a, b)`** or `a + b` - Adds two float values
   - Inputs: Float, Float
@@ -113,7 +117,10 @@ scaled = offset * 0.5
   - Inputs: Float, Float
   - Output: Float
 
-#### Vector Operations
+</details>
+
+<details>
+<summary><strong>Vector Operations</strong></summary>
 
 - **`AddVector3(a, b)`** or `a + b` - Adds two Vector3 values
   - Inputs: Vector3, Vector3
@@ -155,7 +162,10 @@ scaled = offset * 0.5
   - Inputs: Float, Float, Float
   - Output: Vector3
 
-#### Comparison Operations
+</details>
+
+<details>
+<summary><strong>Comparison Operations</strong></summary>
 
 - **`CompareFloats(a, b, operator)`** or `a < b`, `a > b`, etc. - Compares two float values
   - Inputs: Float, Float
@@ -183,7 +193,10 @@ scaled = offset * 0.5
   - Inputs: Bool, Bool
   - Output: Bool
 
-#### Conditional Operations
+</details>
+
+<details>
+<summary><strong>Conditional Operations</strong></summary>
 
 - **`ConditionalSetFloat(condition, trueValue, falseValue)`** - Returns one float based on condition
   - Inputs: Bool, Float, Float
@@ -193,7 +206,10 @@ scaled = offset * 0.5
   - Inputs: Bool, Vector3, Vector3
   - Output: Vector3
 
-#### Math Functions
+</details>
+
+<details>
+<summary><strong>Math Functions</strong></summary>
 
 - **`Abs(x)`** - Absolute value
 - **`Round(x)`** - Rounds to nearest integer
@@ -216,7 +232,10 @@ All math functions:
 - Input: Float
 - Output: Float
 
-#### Utility Operations
+</details>
+
+<details>
+<summary><strong>Utility Operations</strong></summary>
 
 - **`ClampFloat(value, min, max)`** - Clamps a float between min and max
   - Inputs: Float, Float, Float
@@ -226,7 +245,10 @@ All math functions:
   - Inputs: Float, Float
   - Output: Float
 
-#### Debug Nodes
+</details>
+
+<details>
+<summary><strong>Debug Nodes</strong></summary>
 
 - **`Debug(value, string=None, changePosition=True)`** - Debug output node
   - Input: Any node type
@@ -240,17 +262,23 @@ All math functions:
   - Inputs: Vector3, Float, Float, Color
   - Output: None (side effect)
 
-#### Custom Nodes
+</details>
+
+<details>
+<summary><strong>Custom Nodes</strong></summary>
 
 - **`QuadraticFormula(a, b, c)`** - Solves quadratic equation ax² + bx + c = 0
   - Inputs: Float, Float, Float
   - Output: Tuple of (solutionExists: Bool, root1: Float, root2: Float)
 
+</details>
+
 ---
 
 ### Slime Volleyball Specific Nodes
 
-#### Game Entity Access
+<details>
+<summary><strong>Game Entity Access</strong></summary>
 
 The library provides pre-defined game entities for Slime Volleyball:
 
@@ -277,7 +305,10 @@ The library provides pre-defined game entities for Slime Volleyball:
   - `Game.Pi` - Pi constant (Float)
   - `Game.SimulationDuration` - Simulation duration (Float)
 
-#### Slime Volleyball Specific Functions
+</details>
+
+<details>
+<summary><strong>Slime Volleyball Specific Functions</strong></summary>
 
 - **`InitializeSlime(name, color, country, speed, acceleration, jump)`**
   - Initializes your slime bot with the specified properties
@@ -331,9 +362,14 @@ The library provides pre-defined game entities for Slime Volleyball:
   - Available countries: `"Andorra"`, `"Argentina"`, `"Armenia"`, `"Australia"`, `"Austria"`, `"Bangladesh"`, `"Belarus"`, `"Belgium"`, `"Brazil"`, `"Canada"`, `"Chile"`, `"China"`, `"Colombia"`, `"Croatia"`, `"Cuba"`, `"Czechia"`, `"DR Congo"`, `"Denmark"`, `"Egypt"`, `"Ethiopia"`, `"Finland"`, `"France"`, `"Germany"`, `"Guatemala"`, `"India"`, `"Indonesia"`, `"Iran"`, `"Iraq"`, `"Ireland"`, `"Israel"`, `"Italy"`, `"Japan"`, `"Jordan"`, `"Kenya"`, `"Latvia"`, `"Malaysia"`, `"Mexico"`, `"Myanmar"`, `"Netherlands"`, `"New Zealand"`, `"Nigera"`, `"Norway"`, `"Oman"`, `"Pakistan"`, `"Palestine"`, `"Philippines"`, `"Poland"`, `"Portugal"`, `"Puerto Rico"`, `"Qatar"`, `"Romania"`, `"Russia"`, `"Slovakia"`, `"Slovenia"`, `"Somolia"`, `"South Africa"`, `"South Korea"`, `"Spain"`, `"Sweden"`, `"Switzerland"`, `"Syria"`, `"Tanzania"`, `"Thailand"`, `"Turkey"`, `"Ukraine"`, `"Unite Arab Emirates"`, `"United Kingdom"`, `"United States of America"`, `"Vietnam"`, `"Yemen"`
   - Output: Country
 
+</details>
+
 ---
 
 ## Saving Your AI
+
+<details>
+<summary><strong>SaveData Function</strong></summary>
 
 - **`SaveData(filePath, layout="auto", pruneUnusedNodes=True, keepPosition=True)`**
   - Saves the AI data to a JSON file that can be imported into Unity
@@ -347,10 +383,12 @@ The library provides pre-defined game entities for Slime Volleyball:
   - `pruneUnusedNodes`: Remove nodes that aren't connected (default: True)
   - `keepPosition`: Preserve manually set node positions (default: True)
 
+</details>
+
 ## Example: Advanced Bot
 
 ```python
-from SlimeGameLibrary import *
+from AIGameLibrary import *
 
 # Initialize bot
 InitializeSlime("MyBot", "Blue", "Canada", 6, 4, 3)

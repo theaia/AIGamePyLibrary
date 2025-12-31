@@ -1,4 +1,4 @@
-from SlimeGameLibrary import *
+from AIGameLibrary import *
 
 # 1 to 1 recreation of the default AIA bot
 
