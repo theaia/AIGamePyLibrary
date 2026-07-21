@@ -46,26 +46,6 @@ SlimeController(moveTo, jumpCondition)
 SaveData("SlimeVolleyball/AIComp_Data/Saves/AIA python.txt", "grid")
 ```
 
-## Marking your bot as LLM-driven
-
-The car / kart Properties node carries an **`isLLM`** flag that is **not exposed in the Unity inspector** — it can only be set by the PyLib compiler. At runtime Unity reads it from the node's **`modifier`** field during `Initialize()`, writes it onto the resulting properties (`KartProperties` / modular car properties), and applies it to the spawned `Player` (`Player.IsLLM = true`).
-
-To set it, **capture the Properties node** returned by any of the helpers and assign its `modifier` after construction. Accepted values: **`"True"` / `"False"`** or **`"1"` / `"0"`** (anything else falls back to `False`).
-
-```python
-from AIGamePyLibrary import *
-
-# Works for InitializeDemoDerby, InitializeParking, and ConstructModularUniformProperties —
-# they all return the same UniformModularCarProperties node.
-props = InitializeDemoDerby(
-    "MyBot", "United States of America", "Tan",
-    0, 0, "Brown", 0, "Red", "",
-)
-props.data["modifier"] = "True"   # mark this car as LLM-driven
-```
-
-`isLLM` is persisted in the saved JSON through the standard `modifier` field, so the graph round-trips through Unity without losing the flag. Equivalent behavior is wired up on the C# side for `ConstructKartProperties` (Kart-style simulations) — same `modifier` accepted values.
-
 ## Core Concepts
 
 ### Nodes
@@ -377,6 +357,41 @@ Node configurations determine which nodes are available in the Unity editor. Eac
         </ul>
       </td>
       <td valign="top"><a href="#operation-options">Operations</a></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>Power(base, exponent)</code></td>
+      <td valign="top"><code>a ** b</code></td>
+      <td valign="top">Raises base to the given power (<code>Mathf.Pow</code>)</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>Base</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float2</code></a> — <sub>Exponent</sub></li>
+        </ul>
+      </td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>The resulting value</sub></li>
+        </ul>
+      </td>
+      <td valign="top">—</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>Lerp(a, b, t)</code></td>
+      <td valign="top">—</td>
+      <td valign="top">Linearly interpolates between A and B by T (<code>Mathf.Lerp</code>)</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>Start (A)</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float2</code></a> — <sub>End (B)</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float3</code></a> — <sub>Factor (T)</sub></li>
+        </ul>
+      </td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>The resulting value</sub></li>
+        </ul>
+      </td>
+      <td valign="top">—</td>
     </tr>
   </tbody>
 </table>
@@ -913,8 +928,88 @@ Note: `World` exists in the Unity dropdown; currently it behaves the same as `Se
       <td valign="top">—</td>
       <td valign="top">—</td>
     </tr>
+    <tr>
+      <td valign="top"><code>CreateFunction(name)</code></td>
+      <td valign="top">Defines a named custom function body (Unity: Construct Custom Function). Nodes assigned to its bounds run only when a matching <code>CustomFunction</code> call evaluates them — not during the global graph solve.</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-any"><code>Any1</code></a> (In) — <sub><strong>Return</strong> — wire body output here via <code>SetFunctionReturn</code> (same id as Param1 Out)</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-string"><code>String1</code></a>–<code>String4</code> — <sub>Optional parameter labels</sub></li>
+        </ul>
+      </td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-any"><code>Any1</code></a>–<code>Any4</code> — <sub>Up to 4 parameters passed into the body (<code>fn.Param1</code>…)</sub></li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td valign="top"><code>SetFunctionReturn(fn, body_output)</code></td>
+      <td valign="top"><strong>Required for a call result.</strong> Connects a body output (e.g. <code>Power.Float1</code>) to CreateFunction Return port <code>Any1</code> (polarity In).</td>
+      <td valign="top"><code>body_output</code> — any body node with an out port</td>
+      <td valign="top">—</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>AssignToFunction(body_node, fn)</code></td>
+      <td valign="top">Marks a node as owned by the CreateFunction body (<code>ownerFunctionSID</code>)</td>
+      <td valign="top">—</td>
+      <td valign="top">Returns the same body node</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>CustomFunction(name, param1=None, …)</code></td>
+      <td valign="top">Call site for a CreateFunction by name (Unity key <code>Function</code>). Passes through used params; output is the definition’s Return value when <code>SetFunctionReturn</code> was used.</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-any"><code>Any1</code></a>–<code>Any4</code> — <sub>Arguments for connected params</sub></li>
+        </ul>
+      </td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-any"><code>Any1</code></a> — <sub>Return value (null if definition has no Return)</sub></li>
+        </ul>
+      </td>
+    </tr>
   </tbody>
 </table>
+
+<details>
+<summary><strong>Custom Functions</strong> (how they differ from normal nodes)</summary>
+
+- **Definition vs call:** `CreateFunction("MyFn")` defines a reusable body; `CustomFunction("MyFn", …)` calls it by name (`modifier`).
+- **Parameters:** Up to **4** Param outputs on the definition (`Any1`–`Any4` → `fn.Param1`…`Param4`). Wire them into body nodes. Only params that are connected on the definition appear as inputs on call sites.
+- **Return (required for a usable call result):** Call **`SetFunctionReturn(fn, body_output)`**. This connects the body node's output port to the CreateFunction **Return** input.
+  - Return port id is **`Any1`**, polarity **In** (GameObject name `"Any - In"`). Param1 is also `Any1` but polarity **Out** — same id, different polarity.
+  - For `Power` / `Lerp` / most float math, the body output port is **`Float1`** → wire to Return `Any1` (In).
+  - Without `SetFunctionReturn`, `CustomFunction(...)` still runs the body but the call output is **null**.
+- **Body bounds:** Mark every body node with `AssignToFunction(body_node, fn)` (`ownerFunctionSID`). Body nodes are skipped by the global solve and only run when a `Function` call evaluates them.
+- **Isolation:** Body cannot wire to the outside world except via Param / Return. Banned in body: nested `CreateFunction` / `Function`, `SetVariable`, and most destination nodes (controllers / properties). Allowed destinations in body: `Debug`, `DebugDrawLine`, `DebugDrawDisc`. Max nested call depth: **8**.
+- **Unlike `Region`:** Region is visual-only. CreateFunction bounds **change execution**.
+- **Unlike Python helpers in `customNodes.py`:** those expand into ordinary nodes at compile time. Unity Custom Functions are the `CreateFunction` / `Function` pair. Native math nodes like `Power(...)` / `Lerp(...)` are normal graph nodes and are ideal **inside** a function body.
+
+### Canonical example — Power inside a Custom Function (LLM copy/paste)
+
+```python
+from AIGamePyLibrary import *
+
+fn = CreateFunction("PowerFn")
+
+# Body: params → Power → Return
+#   fn.Param1 (Any1) = base
+#   fn.Param2 (Any2) = exponent
+#   Power.Float1     = result  →  MUST go to CreateFunction Return (Any1 In)
+powered = AssignToFunction(Power(fn.Param1, fn.Param2), fn)
+SetFunctionReturn(fn, powered)   # Power.Float1 → Return Any1 (In)  ← do not omit
+
+# Call with different variables; CustomFunction output IS the Return value
+result = CustomFunction("PowerFn", Float(2), Float(3))  # → 8
+Debug(result, "2^3", changePosition=False)
+
+SaveData("PowerFunctionTest.txt", "grid")
+```
+
+Full three-call test: `Examples/CustomFunctionPowerExample.py`.
+
+</details>
 
 </details>
 
@@ -1278,6 +1373,7 @@ Alignment to the stall is encouraged but not required. Colliding with any object
 - You must drive your car via the destination node: `ModularUniformController(...)`
 - Use `ConstructModularUniformProperties(...)` / `InitializeParking(...)` to set cosmetics
 - Sensors are built from `Spherecast(...)` → `CarRaycasts(...)` → `HitInfo(...)`
+- The same modular car stack (controller, sensors, Autosteer / Autothrottle) is shared with **Demo Derby** and **RacingV2**. RacingV2 adds race-specific getters and uses `ConstructRacingV2Properties` for cosmetics + stats — see **RacingV2 Simulation**.
 
 </details>
 
@@ -1429,6 +1525,7 @@ Same nine positional arguments as <code>ConstructModularUniformProperties(...)</
 
 - Raycasts originate from the car’s **center**. Approx width **6**, length **10.8**.
 - Stepping on the **brake** while setting **throttle** to **`-1`** will almost instantly stop the car.
+- Shared with Demo Derby and RacingV2: `ModularUniformController`, `Spherecast` → `CarRaycasts` → `HitInfo`, `Autosteer`, `Autothrottle`. Parking cosmetics use `ConstructModularUniformProperties` / `InitializeParking` (not RacingV2’s stat budget properties node).
 
 </details>
 
@@ -1462,10 +1559,11 @@ Maximize damage to other cars. Collisions deal damage; vulnerable parts change h
 <details>
 <summary><strong>Requirements</strong></summary>
 
-- Same modular car stack as Parking:
+- Same modular car stack as Parking / RacingV2:
   - Drive with `ModularUniformController(...)`
   - Cosmetics with `ConstructModularUniformProperties(...)` / `InitializeParking(...)` / `InitializeDemoDerby(...)`
   - Sensors via `Spherecast(...)` → `CarRaycasts(...)` → `HitInfo(...)`
+  - Optional `Autosteer` / `Autothrottle` (also used by RacingV2)
 
 </details>
 
@@ -1712,6 +1810,7 @@ Maximize damage to other cars. Collisions deal damage; vulnerable parts change h
 
 - **CarGetPart**: only output **`Transform1`** currently wires up correctly. Using the health output (published as `Float2`) in another node currently raises `KeyError: 'Float2'`.
 - **CarInfo**: only output **`Transform1`** currently wires up correctly. Using `Vector32` / `Bool3` / `Bool4` / `Float5` / `Float6` in another node currently raises `KeyError` (commonly `Vector32` / `Bool3` / `Bool4` / `Float5` / `Float6`).
+- The same limitation applies in **RacingV2** graphs that use `CarInfo` / `CarGetPart` — prefer `.CarTransform` / `.PartTransform` plus `RacingV2GetFloat` / sensors instead of multi-output component reads.
 
 ### Minimal complete Demo Derby example
 
@@ -1764,8 +1863,303 @@ SaveData("MyBot", "auto")
 
 ### Tips
 
-- Raycasts originate at the car **center** (rough width **6**, length **10.8**, same as Parking).
+- Raycasts originate at the car **center** (rough width **6**, length **10.8**, same as Parking / RacingV2).
 - JSON node id for auto throttle is **`Autothrottle`** (not `AutoThrottle`).
+- Shared modular stack also powers **RacingV2**; use `RacingV2Get*` for race state and `InitializeRacingV2` for cosmetics + stats.
+
+</details>
+
+</div>
+
+</details>
+
+---
+
+<details>
+<summary><strong>Soccer Simulation</strong></summary>
+
+<div style="margin-left: 1em;">
+
+<details>
+<summary><strong>Overview</strong></summary>
+
+Team soccer (4 players per team graph). Control each player with move-to, sprint, and interact (shoot / tackle). Match flow includes kickoff, play, goals, overtime, and whistle (stale ball).
+
+**Save folder:** `Soccer/`
+
+</details>
+
+<details>
+<summary><strong>Requirements</strong></summary>
+
+- Drive players with `SoccerController(player, moveTo, sprint, interact)` for players `1`–`4` (Unity keys `SoccerController1`…`4`)
+- Optional sensors: `SoccerPlayerSensors(player, spherecast)` → eight RaycastHits labeled **A–H** on the Player Sensor node
+- Team cosmetics / faceoff: `ConstructSoccerProperties(...)` / `InitializeSoccer(...)`
+- World state: `SoccerGetBool` / `SoccerGetFloat` / `SoccerGetVector3` / `SoccerGetTransform`
+
+</details>
+
+<details>
+<summary><strong>Nodes</strong></summary>
+
+<table>
+  <thead>
+    <tr>
+      <th align="left">Node</th>
+      <th align="left">Purpose</th>
+      <th align="left">Inputs</th>
+      <th align="left">Outputs</th>
+      <th align="left">Options / Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><code>SoccerController(player, moveTo, sprint, interact)</code></td>
+      <td valign="top">Controls team player <code>player</code> (1–4)</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-vector3"><code>Vector31</code></a> — <sub>Move-to world position</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-bool"><code>Bool1</code></a> — <sub>Sprint</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-bool"><code>Bool2</code></a> — <sub>Interact (shoot / tackle)</sub></li>
+        </ul>
+      </td>
+      <td valign="top">—</td>
+      <td valign="top">Destination. Hold interact to charge a shot (with ball) or attempt tackle (without). See Details.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>SoccerPlayerSensors(player, spherecast)</code></td>
+      <td valign="top">Eight-way spherecasts around player <code>player</code> (1–4)</td>
+      <td valign="top"><ul><li style="margin: 0 0 8px 0;"><a href="#datatype-spherecast"><code>Spherecast1</code></a></li></ul></td>
+      <td valign="top"><code>RaycastHit1</code>…<code>8</code> (letters <strong>A</strong>–<strong>H</strong>)</td>
+      <td valign="top">Aligns with the Player Sensor graphic</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>ConstructSoccerProperties(name, country, faceoff1..4)</code></td>
+      <td valign="top">Team name, country, and faceoff positions</td>
+      <td valign="top">String, Country, Vector3 ×4</td>
+      <td valign="top">—</td>
+      <td valign="top">Destination. Or use <code>InitializeSoccer(...)</code></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>SoccerGetBool(value)</code></td>
+      <td valign="top">Bool world state</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Bool1</code></td>
+      <td valign="top">Index or label — see <a href="#soccergetbool-values">all values</a></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>SoccerGetFloat(value)</code></td>
+      <td valign="top">Float world state</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Float1</code></td>
+      <td valign="top">Index or label — see <a href="#soccergetfloat-values">all values</a></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>SoccerGetTransform(value)</code></td>
+      <td valign="top">Key transforms</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Transform1</code></td>
+      <td valign="top">Index or label — see <a href="#soccergettransform-values">all values</a></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>SoccerGetVector3(value)</code></td>
+      <td valign="top">Directions, landmarks, open-player picks</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Vector31</code></td>
+      <td valign="top">Index or label — see <a href="#soccergetvector3-values">all values</a></td>
+    </tr>
+  </tbody>
+</table>
+
+</details>
+
+<details>
+<summary><strong>Details</strong></summary>
+
+### Tackles
+
+A tackle contest subtracts the **stamina delta** between the tackling player and the ball carrier from both players. After that drain, if the tackling player has **more stamina** (or equal), they win the ball.
+
+### Shooting (interact release)
+
+If a player **has the ball** and there is **shot charge**, setting **interact** (`Bool2`) to **false** releases the shot — the ball is kicked in the direction of that frame’s **movement input**.
+
+Hold interact while with the ball to charge; without the ball, interact attempts a tackle / pickup.
+
+### Vector3 directional checks
+
+`SoccerGetVector3` options that search clear / directional views check the **8** player spherecast directions and return the **first** valid direction meeting the criteria (or null if none). Letters match the Player Sensor graphic (**A**–**H**).
+
+Search order prioritizes the team’s attacking direction:
+
+- **Home:** E, C, H, B, G, A, F, D
+- **Away:** D, F, A, G, B, H, C, E
+
+### Kickoff
+
+- Opening kickoff receiving team is **random**
+- After a goal, the team that was **scored on** receives the next kickoff
+- In **extra time**, the receiving team is the **opposite** of who kicked off at match start
+- On **whistle** (stale ball / no meaningful movement after time), kickoff flips to the **opposite** of who last received a kickoff
+
+Pass a dropdown **index** (`0`, `1`, …) or the exact Unity **label** string below. Order matches Unity and `DROPDOWN_OPTIONS` in `data.py`.
+
+<a id="soccergetbool-values"></a>
+
+### SoccerGetBool values
+
+`"Team Has Ball"`, `"Opponent Has Ball"`, `"Is Ball Loose"`, `"Team Player 1 Has Ball"`, `"Team Player 2 Has Ball"`, `"Team Player 3 Has Ball"`, `"Team Player 4 Has Ball"`, `"Opponent Player 1 Has Ball"`, `"Opponent Player 2 Has Ball"`, `"Opponent Player 3 Has Ball"`, `"Opponent Player 4 Has Ball"`, `"Is Ball Nearby Team Player 1"`, `"Is Ball Nearby Team Player 2"`, `"Is Ball Nearby Team Player 3"`, `"Is Ball Nearby Team Player 4"`, `"Is Ball Nearby Opponent Player 1"`, `"Is Ball Nearby Opponent Player 2"`, `"Is Ball Nearby Opponent Player 3"`, `"Is Ball Nearby Opponent Player 4"`, `"Is Team Player 1 Closest Teammate to Ball"`, `"Is Team Player 2 Closest Teammate to Ball"`, `"Is Team Player 3 Closest Teammate to Ball"`, `"Is Team Player 4 Closest Teammate to Ball"`, `"Is Opponent Player 1 Closest Opponent to Ball"`, `"Is Opponent Player 2 Closest Opponent to Ball"`, `"Is Opponent Player 3 Closest Opponent to Ball"`, `"Is Opponent Player 4 Closest Opponent to Ball"`, `"Is Team Player 1 Open"`, `"Is Team Player 2 Open"`, `"Is Team Player 3 Open"`, `"Is Team Player 4 Open"`, `"Is Opponent Player 1 Open"`, `"Is Opponent Player 2 Open"`, `"Is Opponent Player 3 Open"`, `"Is Opponent Player 4 Open"`, `"Is Kickoff"`, `"Is Team Kicking off"`, `"Is Opponent Kicking off"`, `"Team Is Winning"`, `"Opponent Is Winning"`, `"Team Scored Last Point"`, `"Opponent Scored Last Point"`, `"Ball On Team Side"`, `"Ball On Opponent Side"`, `"Is Ball Headed Towards Team Goal"`, `"Is Ball Headed Towards Opponent Goal"`, `"Is Home Team"`, `"Is Away Team"`, `"Is Active Graph"`
+
+<a id="soccergetfloat-values"></a>
+
+### SoccerGetFloat values
+
+`"Team Score"`, `"Opponent Score"`, `"Team Shots"`, `"Opponent Shots"`, `"Team Possession %"`, `"Opponent Possession %"`, `"Team Attacking %"`, `"Opponent Attacking %"`, `"Ball Speed"`, `"Player Interact Radius"`, `"Player With Ball Shot Charge %"`, `"Ball Carrier Stamina"`, `"Ball Carrier Shot Charge"`, `"Teammate 1 Shot Charge"`, `"Teammate 2 Shot Charge"`, `"Teammate 3 Shot Charge"`, `"Teammate 4 Shot Charge"`, `"Field Width"`, `"Field Depth"`, `"Kickoff Circle Radius"`, `"Goal Width"`, `"Goal Height"`, `"Team Player 1 Stamina"`, `"Team Player 2 Stamina"`, `"Team Player 3 Stamina"`, `"Team Player 4 Stamina"`, `"Distance from Team Player 1 to nearest Opponent"`, `"Distance from Team Player 2 to nearest Opponent"`, `"Distance from Team Player 3 to nearest Opponent"`, `"Distance from Team Player 4 to nearest Opponent"`, `"Opponent Player 1 Stamina"`, `"Opponent Player 2 Stamina"`, `"Opponent Player 3 Stamina"`, `"Opponent Player 4 Stamina"`, `"Opponent Nearest Teammate Player 1 Stamina"`, `"Opponent Nearest Teammate Player 2 Stamina"`, `"Opponent Nearest Teammate Player 3 Stamina"`, `"Opponent Nearest Teammate Player 4 Stamina"`, `"Stamina of last defending opponent"`, `"Current Simulation Time"`, `"Max Simulation Time"`, `"Simulation Time Remaining"`, `"Delta Time"`, `"Fixed Delta Time"`, `"Pi"`
+
+<a id="soccergettransform-values"></a>
+
+### SoccerGetTransform values
+
+`"Ball"`, `"Team Player 1"`, `"Team Player 2"`, `"Team Player 3"`, `"Team Player 4"`, `"Opponent Player 1"`, `"Opponent Player 2"`, `"Opponent Player 3"`, `"Opponent Player 4"`, `"Teammate Nearest Team Player 1"`, `"Teammate Nearest Team Player 2"`, `"Teammate Nearest Team Player 3"`, `"Teammate Nearest Team Player 4"`, `"Opponent Nearest Team Player 1"`, `"Opponent Nearest Team Player 2"`, `"Opponent Nearest Team Player 3"`, `"Opponent Nearest Team Player 4"`, `"Team Goal Center"`, `"Team Goal Left Post"`, `"Team Goal Right Post"`, `"Opponent Goal Center"`, `"Opponent Goal Left Post"`, `"Opponent Goal Right Post"`, `"Opponent Nearest Team Goal"`, `"Opponent Nearest Opponent Goal"`, `"Teammate Nearest Team Goal"`, `"Teammate Nearest Opponent Goal"`
+
+<a id="soccergetvector3-values"></a>
+
+### SoccerGetVector3 values
+
+`"Ball Velocity"`, `"Clear direction from team carrier"`, `"Backwards clear direction from team carrier"`, `"Clear direction from team carrier (avoid goal lines)"`, `"Clear direction from team carrier (avoid sidelines)"`, `"Clear direction from team carrier (avoid all walls)"`, `"Upper Corner Home Side"`, `"Lower Corner Home Side"`, `"Upper Midfield"`, `"Lower Midfield"`, `"Upper Corner Away Side"`, `"Lower Corner Away Side"`, `"Upper Corner Opposing Side"`, `"Lower Corner Opposing Side"`, `"Upper Corner Team Side"`, `"Lower Corner Team Side"`, `"Center Field"`, `"Get nearest open teammate"`, `"Get furthest open teammate"`, `"Get most open teammate"`, `"Get nearest open opponent"`, `"Get furthest open opponent"`, `"Get most open opponent"`, `"Direction of clear teammate from Teammate 1"`, `"Direction of clear teammate from Teammate 2"`, `"Direction of clear teammate from Teammate 3"`, `"Direction of clear teammate from Teammate 4"`, `"Direction of clear teammate from Opponent 1"`, `"Direction of clear teammate from Opponent 2"`, `"Direction of clear teammate from Opponent 3"`, `"Direction of clear teammate from Opponent 4"`, `"Direction of ball from Teammate 1"`, `"Direction of ball from Teammate 2"`, `"Direction of ball from Teammate 3"`, `"Direction of ball from Teammate 4"`, `"Direction of ball from Opponent 1"`, `"Direction of ball from Opponent 2"`, `"Direction of ball from Opponent 3"`, `"Direction of ball from Opponent 4"`, `"Direction of team goal from Teammate 1"`, `"Direction of team goal from Teammate 2"`, `"Direction of team goal from Teammate 3"`, `"Direction of team goal from Teammate 4"`, `"Direction of opponent goal from Teammate 1"`, `"Direction of opponent goal from Teammate 2"`, `"Direction of opponent goal from Teammate 3"`, `"Direction of opponent goal from Teammate 4"`, `"Clear direction from Teammate 1"`, `"Clear direction from Teammate 2"`, `"Clear direction from Teammate 3"`, `"Clear direction from Teammate 4"`, `"Direction of teammate from Team Player 1"`, `"Direction of teammate from Team Player 2"`, `"Direction of teammate from Team Player 3"`, `"Direction of teammate from Team Player 4"`
+
+### Tips
+
+- During kickoff restriction, only the kicking-off team gets graph control; non-kickoff players are kept outside the center circle until first touch / delay expires.
+- Convert transforms to positions with `RelativePosition(transform, "Self")`.
+
+</details>
+
+</div>
+
+</details>
+
+---
+
+<details>
+<summary><strong>RacingV2 Simulation</strong></summary>
+
+<div style="margin-left: 1em;">
+
+<details>
+<summary><strong>Overview</strong></summary>
+
+Lap racing on additive **V2** tracks using the modular car stack. Default **3** laps; cars can DNF on no waypoint progress; modular part damage still applies.
+
+**Save folder:** `RacingV2/`
+
+</details>
+
+<details>
+<summary><strong>Requirements</strong></summary>
+
+- Drive with `ModularUniformController(throttle, steering, brake)` (same as Parking / Demo Derby)
+- Cosmetics + **20-point** stats: `ConstructRacingV2Properties(...)` / `InitializeRacingV2(...)` (not `UniformModularCarProperties`)
+- Sensors: `Spherecast` → `CarRaycasts` → `HitInfo` (shared stack)
+- Optional helpers: `Autosteer`, `Autothrottle`, `CarGetPart`, `CarInfo` (same multi-output wiring caveat as Demo Derby)
+- Race state: `RacingV2GetFloat` / `RacingV2GetBool` / `RacingV2GetCar` / `RacingV2GetWaypoint` / `RacingV2Waypoint`
+
+</details>
+
+<details>
+<summary><strong>Nodes</strong></summary>
+
+<table>
+  <thead>
+    <tr>
+      <th align="left">Node</th>
+      <th align="left">Purpose</th>
+      <th align="left">Inputs</th>
+      <th align="left">Outputs</th>
+      <th align="left">Options / Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><code>InitializeRacingV2(..., speed, turn, health)</code></td>
+      <td valign="top">Cosmetics + Stat1/2/3 (20-point budget → speed / turn / health)</td>
+      <td valign="top">Same cosmetics as Parking, plus three <code>Stat</code> inputs</td>
+      <td valign="top">—</td>
+      <td valign="top">Unity key <code>ConstructRacingV2Properties</code></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>RacingV2GetFloat(value)</code></td>
+      <td valign="top">Speed, waypoints, rank, laps, sim time, …</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Float1</code></td>
+      <td valign="top">Index or label (see DROPDOWN_OPTIONS)</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>RacingV2GetBool(value)</code></td>
+      <td valign="top">Grounded / disabled / sim started</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Bool1</code></td>
+      <td valign="top"><code>Is Grounded</code>, <code>Is Disabled</code>, <code>Simulation started</code></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>RacingV2GetCar(mode, index_float=None)</code></td>
+      <td valign="top">Select a car (modes 0–26, same shape as DemoDerbyGetCar)</td>
+      <td valign="top">Optional Float for by-index / by-rank</td>
+      <td valign="top"><code>Car1</code></td>
+      <td valign="top">Rank uses race scoreboard</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>RacingV2GetWaypoint(value, index_float=None)</code></td>
+      <td valign="top">Next / Previous / By index / Start waypoint</td>
+      <td valign="top">Optional Float for By index</td>
+      <td valign="top"><code>Waypoint1</code></td>
+      <td valign="top">Feed into <code>RacingV2Waypoint</code></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>RacingV2Waypoint(mode, waypoint, ref=None)</code></td>
+      <td valign="top">Resolve a waypoint to a world point</td>
+      <td valign="top">Waypoint (+ optional Transform for Nearest)</td>
+      <td valign="top"><code>.Position</code> (Vector3), <code>.Index</code> (Float)</td>
+      <td valign="top">Center / Left / Right / Nearest point</td>
+    </tr>
+  </tbody>
+</table>
+
+Shared modular nodes are documented under **Parking Simulation** and **Demo Derby Simulation** (`ModularUniformController`, `CarRaycasts`, `Autosteer`, `Autothrottle`, …).
+
+</details>
+
+<details>
+<summary><strong>Details</strong></summary>
+
+### Stats
+
+`ConstructRacingV2Properties` takes **Stat1** (speed), **Stat2** (turn), **Stat3** (health) with a sequential **20-point** budget (typical mapping: max speed ~20–60, turn ~0.5–2.0, health fraction of baseline).
+
+### RacingV2GetFloat options
+
+`Speed`, `Signed Speed (forward +, reverse −)`, waypoint indices/distances, `Current race rank`, `Number of competitors`, lap times, `Current lap` / `Total laps`, sim time, `Delta Time`, `Pi`, …
+
+### Tips
+
+- Prefer `Autosteer(goal)` + `Autothrottle(goal, speed)` toward `RacingV2Waypoint(...).Position`.
+- Avoid `CarInfo` / `CarGetPart` non-Transform outputs (same KeyError limitation as Demo Derby).
+- Older `Racing.unity` / Kart nodes are a different stack — use **RacingV2** helpers for this scene.
+
+### Minimal RacingV2 sketch
+
+```python
+from AIGamePyLibrary import *
+
+props = InitializeRacingV2(
+    "Racer", "United States of America", "Tan", 0, 0, "Brown", 0, "Red", "",
+    7, 7, 6,
+)
+wp = RacingV2GetWaypoint("Next waypoint")
+goal = RacingV2Waypoint("Center", wp).Position
+ModularUniformController(Autothrottle(goal, 30.0), Autosteer(goal), Float(0.0))
+SaveData("RacingV2/AIComp_Data/Saves/racer.txt", "grid")
+```
 
 </details>
 
@@ -2185,7 +2579,7 @@ This section is the “type dictionary” that port keys link to (for example: c
 
 - **Type**: Car
 - **Ports**: `Car1`, `Car2`, ...
-- **Meaning**: Demo Derby car reference (selected via `DemoDerbyGetCar(...)` or derived from a Transform).
+- **Meaning**: Car reference for Demo Derby / RacingV2 (selected via `DemoDerbyGetCar(...)` / `RacingV2GetCar(...)` or derived from a Transform).
 
 </details>
 
@@ -2193,6 +2587,27 @@ This section is the “type dictionary” that port keys link to (for example: c
 
 <details>
 <summary><strong>Notes for LLM Authors</strong></summary>
+
+## Marking your bot as LLM-driven
+
+The car / kart Properties node carries an **`isLLM`** flag that is **not exposed in the Unity inspector** — it can only be set by the PyLib compiler. At runtime Unity reads it from the node's **`modifier`** field during `Initialize()`, writes it onto the resulting properties (`KartProperties` / modular car properties), and applies it to the spawned `Player` (`Player.IsLLM = true`).
+
+To set it, **capture the Properties node** returned by any of the helpers and assign its `modifier` after construction. Accepted values: **`"True"` / `"False"`** or **`"1"` / `"0"`** (anything else falls back to `False`).
+
+```python
+from AIGamePyLibrary import *
+
+# Works for InitializeDemoDerby, InitializeParking, and ConstructModularUniformProperties —
+# they all return the same UniformModularCarProperties node.
+# For RacingV2, use InitializeRacingV2 / ConstructRacingV2Properties the same way (modifier on the returned node).
+props = InitializeDemoDerby(
+    "MyBot", "United States of America", "Tan",
+    0, 0, "Brown", 0, "Red", "",
+)
+props.data["modifier"] = "True"   # mark this car as LLM-driven
+```
+
+`isLLM` is persisted in the saved JSON through the standard `modifier` field, so the graph round-trips through Unity without losing the flag. Equivalent behavior is wired up on the C# side for `ConstructKartProperties` (Kart-style simulations) and RacingV2 properties — same `modifier` accepted values.
 
 This section consolidates everything an LLM (or anyone new to the library) needs to avoid the most common mistakes. Read it in full before writing a script.
 
@@ -2220,8 +2635,12 @@ Concretely:
   - Survival → `SurvivalGetTransform(...)` / `SurvivalGetFloat(...)` / `SurvivalGetBool(...)`.
   - Parking → `ParkingGetTransform(...)` / `ParkingGetFloat(...)` / `ParkingGetBool(...)`.
   - Demo Derby → `DemoDerbyGetTransform(...)` / `DemoDerbyGetCar(...)` / `CarGetPart(...).PartTransform` / `CarInfo(...).CarTransform`.
+  - RacingV2 → `RacingV2GetFloat(...)` / `RacingV2GetBool(...)` / `RacingV2GetCar(...)` / `RacingV2GetWaypoint(...)` / `RacingV2Waypoint(...)` plus the shared modular car stack (`ModularUniformController`, `CarRaycasts`, …). Properties: `InitializeRacingV2` / `ConstructRacingV2Properties`.
+  - Soccer → `SoccerGetBool(...)` / `SoccerGetFloat(...)` / `SoccerGetTransform(...)` / `SoccerGetVector3(...)`, with per-player `SoccerController(1..4, …)` and `SoccerPlayerSensors(1..4, …)`.
   - The unprefixed aliases (`GetVector3` / `GetTransform` / `GetBool` / `GetFloat`) are **Volleyball only** — they exist purely for backward-compat with old scripts. Using them in any other sim's graph produces the wrong Unity node and won't deserialize correctly.
+  - **Custom Functions** (`CreateFunction` / `CustomFunction`) are reusable Unity subgraphs: params in, return out via **`SetFunctionReturn(fn, body_output)`** (e.g. `Power.Float1` → Return `Any1` In). Body nodes only run when called — not the same as Python `customNodes.py` helpers. See **Default Nodes → Organization → Custom Functions**.
   - To turn any `Transform` node into a world-space `Vector3`, wrap it in `RelativePosition(transform_node, "Self")`.
+- Save folders by sim include `Soccer/`, `RacingV2/`, `DemoDerby/`, `Parking/`, etc.
 - The `Initialize*` helpers take **positional arguments**, not keyword arguments. There is no `name=`, `country=`, `modifier_llm=`, `save_file=` etc. See each simulation's section for the exact signature.
 - There is no `sim` object. Methods like `sim.is_active()`, `sim.get_self_data()`, `sim.get_opponents()`, `sim.set_controls()`, `sim.update()` **do not exist** — if you wrote any of those, you are hallucinating an SDK that isn't here.
 - The **`AIGamePyLibrary`** import exposes helpers as **free functions**, not methods on a module object you treat like a `sim` runtime. (**Aialander PyLib** is the same project under that friendly name.)
@@ -2230,7 +2649,7 @@ Concretely:
 
 ## 🚨 CRITICAL: Multi-output Bug (KeyError: 'Bool4', 'Vector32', etc.)
 
-**The most common error LLMs make** when writing Demo Derby bots is using `CarInfo(...).IsImmobile`, `.Velocity`, `.Health`, `.Rank`, or `CarGetPart(...).HealthPercent` in `ConditionalSetFloat`, comparisons, arithmetic, etc.
+**The most common error LLMs make** when writing Demo Derby or RacingV2 bots is using `CarInfo(...).IsImmobile`, `.Velocity`, `.Health`, `.Rank`, or `CarGetPart(...).HealthPercent` in `ConditionalSetFloat`, comparisons, arithmetic, etc.
 
 ```python
 # These ALL fail with KeyError in ConnectPorts:
@@ -2265,7 +2684,11 @@ These are the exact mistakes we keep seeing. If your draft does any of them, rew
 | 2D thinking: `pos[0]`, `pos[1]`, `heading` in degrees | Everything is 3D `Vector3`. Access components via `vec.x`, `vec.y`, `vec.z`. There is no scalar "heading". Use `Autosteer` for car aim. |
 | `transform.Position` / `transform.position` on a Transform node | `RelativePosition(transform_node, "Self")` returns the world `Vector3` |
 | `Self.Position` / `Ball.Position` / `entity.Velocity` / `Self.TeamSpawn` / `Game.DeltaTime` — dotted accessors on a game entity | **Use the simulation-prefixed node helpers everywhere.** Volleyball: `VolleyballGetVector3("Self Position")`, `VolleyballGetVector3("Ball Velocity")`, `VolleyballGetTransform("Self Team Spawn")`, `VolleyballGetBool("Self Can Jump")`, `VolleyballGetFloat("Delta time")`. Other sims have their own helpers (`DemoDerbyGetTransform`, `DemoDerbyGetCar`, `CarGetPart(...).PartTransform`, `SurvivalGetTransform`, `ParkingGetTransform`, etc.). Never assume `.Position` / `.Velocity` / `.Transform` exists on a Node — it does not, and examples that used to show that shortcut have been rewritten. |
-| `GetTransform(...)` / `GetBool(...)` / `GetFloat(...)` / `GetVector3(...)` used in Survival / Parking / Demo Derby graphs | Those unprefixed names are **Volleyball-only** backward-compat aliases. In other sims you'll silently build the wrong Unity node. Use the sim prefix: `SurvivalGetTransform` / `ParkingGetTransform` / `DemoDerbyGetTransform`, `SurvivalGetFloat` / `ParkingGetFloat` / `DemoDerbyGetCar` + `CarGetPart(...).PartTransform`, etc. |
+| `GetTransform(...)` / `GetBool(...)` / `GetFloat(...)` / `GetVector3(...)` used in Survival / Parking / Demo Derby / Soccer / RacingV2 graphs | Those unprefixed names are **Volleyball-only** backward-compat aliases. In other sims you'll silently build the wrong Unity node. Use the sim prefix: `SurvivalGetTransform` / `ParkingGetTransform` / `DemoDerbyGetTransform` / `SoccerGetTransform` / `RacingV2GetFloat`, etc. |
+| Treating `CreateFunction` like `Region`, or like Python `customNodes.py` | Custom Functions change execution: body nodes only run via `CustomFunction(...)` calls; params/optional return are the interface. `Region` is visual-only. |
+| Building `Power` / math inside `CreateFunction` but forgetting the return wire | Always call `SetFunctionReturn(fn, powered)` so `Power.Float1` connects to CreateFunction Return (`Any1` In). Without it, `CustomFunction(...)` output is null. |
+| Wiring Return to port id `Any` | Return is **`Any1` polarity In** (not `Any`). Param1 Out is also `Any1` — polarity distinguishes them. |
+| One `SlimeController` / single controller for Soccer | Soccer needs `SoccerController(1..4, moveTo, sprint, interact)` per player on the team graph |
 | `Magnitude(CarInfo(car).Velocity)`, `ClampFloat(CarInfo(car).Health, ...)`, `pos + CarInfo(car).Velocity * dt`, `ConditionalSetFloat(CarGetPart(3, car).HealthPercent < 50, ...)` | **Broken in the current library.** Only `.CarTransform` (on `CarInfo`) and `.PartTransform` (on `CarGetPart`) can be passed to another node — everything else raises `KeyError: 'Vector32'` / `'Bool3'` / `'Bool4'` / `'Float5'` / `'Float6'` / `'Float2'` in `ConnectPorts`. Plan your bot around `Autosteer` / `Autothrottle` + `DemoDerbyGetCar` / `CarGetPart(3, ...).PartTransform` + raycast sensors. See **[Multi-output component accessor bug](#multi-output-component-accessor-bug)**. |
 | Forget to call `SaveData(...)` at the end | Always finish with `SaveData("YourBotName", "auto")` — without this the script does literally nothing |
 

@@ -211,26 +211,26 @@ class Node:
 
     def __pow__(self, other) -> "Node":
         if isinstance(other, Node):
-            if self.type == float and other.type == float:
-                from .customNodes import Power
+            if self.type in (float, "Any") and other.type in (float, "Any"):
+                from .nodes import Power
 
                 return Power(self, other)
 
-        elif isNumber(other) and self.type == float:
-            if other == 2:
+        elif isNumber(other) and self.type in (float, "Any"):
+            if other == 2 and self.type == float:
                 from .nodes import MultiplyFloats
 
                 return MultiplyFloats(self, self)
 
-            from .customNodes import Power
+            from .nodes import Power
 
             return Power(self, other)
 
         return NotImplemented
 
     def __rpow__(self, other) -> "Node":
-        if isNumber(other) and self.type == float:
-            from .customNodes import Power
+        if isNumber(other) and self.type in (float, "Any"):
+            from .nodes import Power
 
             return Power(other, self)
 
@@ -553,7 +553,7 @@ def _normalize_modifier(node_name: str, node_value):
     return node_value
 
 
-def AddNode(nodeName, nodeValue="", includePorts=True, position=None):
+def AddNode(nodeName, nodeValue="", includePorts=True, position=None, ownerFunctionSID=""):
     node = {}
 
     if position is None:
@@ -566,10 +566,14 @@ def AddNode(nodeName, nodeValue="", includePorts=True, position=None):
     node["id"] = nodeName
     node["sID"] = nodeId
     node["modifier"] = _normalize_modifier(nodeName, nodeValue)
+    if ownerFunctionSID:
+        node["ownerFunctionSID"] = ownerFunctionSID
     if nodeName in SERIALIZE_COLOR_NODES:
         node["serializeColor"] = True
         node["serializeSizeDelta"] = True
         node["serializableDefaultColor"] = DEFAULT_NODE_COLOR
+    elif nodeName in SERIALIZE_SIZE_DELTA_NODES:
+        node["serializeSizeDelta"] = True
     node["serializablePorts"] = []
     if includePorts:
         for portData in ports[nodeName]:

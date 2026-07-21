@@ -16,8 +16,5 @@ def QuadraticFormula(a: Node, b: Node, c: Node):
     return d >= 0, root1, root2
 
 
-def Power(node0: Node, node1: Node):
-    """
-    custom x^y node using x^y = e^(y*ln(x))
-    """
-    return Exp(node1 * Ln(node0))
+# Power is a native Unity node — use `Power(base, exponent)` from nodes / `from AIGamePyLibrary import *`.
+# Kept as a re-export so older `from AIGamePyLibrary.customNodes import Power` imports still work.

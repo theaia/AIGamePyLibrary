@@ -714,6 +714,22 @@ def Modulo(node0: Node, node1: Node):
 
 
 @cache
+def Power(base: Node, exponent: Node):
+    """Raises `base` to `exponent` (Unity `Power` / Mathf.Pow)."""
+    baseNode = AddNode("Power")
+    connectInputNodes(baseNode, ["Float", "Float"], [base, exponent])
+    return baseNode
+
+
+@cache
+def Lerp(a: Node, b: Node, t: Node):
+    """Linearly interpolates between `a` and `b` by `t` (Unity `Lerp` / Mathf.Lerp)."""
+    baseNode = AddNode("Lerp")
+    connectInputNodes(baseNode, ["Float", "Float", "Float"], [a, b, t])
+    return baseNode
+
+
+@cache
 def MultiplyFloats(node0: Node, node1: Node):
     baseNode = AddNode("MultiplyFloats")
     inputTypes = ["Float", "Float"]
@@ -1140,7 +1156,7 @@ class CarInfoComponents:
 
 @cache
 def ModularUniformController(throttle: Node, steering: Node, brake: Node):
-    """Destination node: sends throttle/steering/brake to the modular car (Parking and Demo Derby)."""
+    """Destination node: sends throttle/steering/brake to the modular car (Parking, Demo Derby, and RacingV2)."""
     baseNode = AddNode("ModularCarController")
     inputTypes = ["Float", "Float", "Float"]
     connectInputNodes(baseNode, inputTypes, [throttle, steering, brake])
@@ -1159,7 +1175,7 @@ def ConstructModularUniformProperties(
     carColor: colorNames,
     outfitUrl: str,
 ):
-    """Destination node: sets cosmetic options for the modular car (Parking and Demo Derby)."""
+    """Destination node: sets cosmetic options for the modular car (Parking and Demo Derby). RacingV2 uses `ConstructRacingV2Properties` (cosmetics + stats)."""
     baseNode = AddNode("UniformModularCarProperties")
     inputTypes = ["String", "Country", "Color", "Float", "Float", "Color", "Float", "Color", "String"]
     connectInputNodes(
@@ -1172,7 +1188,7 @@ def ConstructModularUniformProperties(
 
 @cache
 def Spherecast(radius: Node, distance: Node):
-    """Defines the Spherecast radius/distance used for `CarRaycasts` (Parking and Demo Derby)."""
+    """Defines the Spherecast radius/distance used for `CarRaycasts` / soccer player sensors (Parking, Demo Derby, RacingV2, Soccer)."""
     baseNode = AddNode("Spherecast")
     inputTypes = ["Float", "Float"]
     connectInputNodes(baseNode, inputTypes, [radius, distance])
@@ -1181,7 +1197,7 @@ def Spherecast(radius: Node, distance: Node):
 
 @cache
 def CarRaycasts(spherecast: Node) -> RaycastHitComponents:
-    """Sends sensors out around the modular car and returns `RaycastHit1..8` (Parking and Demo Derby)."""
+    """Sends sensors out around the modular car and returns `RaycastHit1..8` (Parking, Demo Derby, and RacingV2)."""
     baseNode = AddNode("CarRaycasts")
     inputTypes = ["Spherecast"]
     connectInputNodes(baseNode, inputTypes, [spherecast])
@@ -1307,6 +1323,354 @@ def ParkingGetBool(value: int):
     return AddNode("ParkingGetBool", str(value))
 
 
+# ---------------------------------------------------------------------------
+# Custom Functions (Unity CreateFunction / Function)
+# ---------------------------------------------------------------------------
+
+class CreateFunctionComponents:
+    """Param outputs (Any1–Any4) for a `CreateFunction` definition. Use `.node` for AssignToFunction / Return wiring."""
+
+    def __init__(self, baseNode: Node):
+        self._baseNode = baseNode
+        self.node = baseNode
+
+    @property
+    def Param1(self) -> Node:
+        return Node(self._baseNode.data, 1)
+
+    @property
+    def Param2(self) -> Node:
+        return Node(self._baseNode.data, 2)
+
+    @property
+    def Param3(self) -> Node:
+        return Node(self._baseNode.data, 3)
+
+    @property
+    def Param4(self) -> Node:
+        return Node(self._baseNode.data, 4)
+
+    def __iter__(self):
+        yield self.Param1
+        yield self.Param2
+        yield self.Param3
+        yield self.Param4
+
+    def __len__(self):
+        return 4
+
+
+@cache
+def CreateFunction(name: str = "") -> CreateFunctionComponents:
+    """Defines a named custom function body (Unity key `CreateFunction`).
+
+    Typical pattern:
+        fn = CreateFunction("PowerFn")
+        powered = AssignToFunction(Power(fn.Param1, fn.Param2), fn)
+        SetFunctionReturn(fn, powered)  # REQUIRED to expose Power.Float1 as the call result
+        result = CustomFunction("PowerFn", Float(2), Float(3))
+    """
+    baseNode = AddNode("CreateFunction", name)
+    return CreateFunctionComponents(baseNode)
+
+
+def AssignToFunction(body_node: Node, create_function: Node | CreateFunctionComponents):
+    """Marks `body_node` as belonging to a CreateFunction body (`ownerFunctionSID`).
+
+    Every node used inside the function (e.g. `Power`) must be assigned, or Unity will
+    solve it globally instead of only when the function is called.
+    """
+    create = create_function.node if isinstance(create_function, CreateFunctionComponents) else create_function
+    body_node.data["ownerFunctionSID"] = create.data["sID"]
+    return body_node
+
+
+def SetFunctionReturn(
+    create_function: Node | CreateFunctionComponents,
+    body_output: Node,
+    output_port: str | None = None,
+):
+    """Wire a body node's output to the CreateFunction **Return** input.
+
+    This is what makes `CustomFunction(...)` yield a value. Without it, calls still run
+    the body but the call-site output is null.
+
+    Port mapping (critical for LLMs):
+      - CreateFunction Return input: id ``Any1``, polarity **In** (0)
+        (GameObject name is "Any - In"; same id as Param1 but Param1 is Out)
+      - Typical body outs: ``Float1`` (Power, Lerp, AddFloats, …), ``Vector31``, ``Bool1``, …
+
+    Example — Power.Float1 → function Return:
+        powered = AssignToFunction(Power(fn.Param1, fn.Param2), fn)
+        SetFunctionReturn(fn, powered)                 # connects Float1 → Any1 (In)
+        # equivalent: SetFunctionReturn(fn, powered, "Float1")
+    """
+    create = create_function.node if isinstance(create_function, CreateFunctionComponents) else create_function
+    src = parseLiteral(body_output)
+    if output_port is None:
+        out_ports = [pt["id"] for pt in src.data["serializablePorts"] if pt["polarity"] != 0]
+        out_idx = (body_output.outputIndex if isinstance(body_output, Node) else 1) - 1
+        output_port = out_ports[out_idx]
+    # Return port id is Any1 with polarity In (see Prefabs/Ports/In/Any - In.prefab).
+    ConnectPorts((output_port, "Any1"), src, create)
+    return create
+
+
+@cache
+def CustomFunction(
+    name: str,
+    param1: Node | None = None,
+    param2: Node | None = None,
+    param3: Node | None = None,
+    param4: Node | None = None,
+):
+    """Call site for a CreateFunction by `name` (Unity key `Function`).
+
+    Passes up to 4 parameters into the definition's Param1–4. The returned Node is the
+    definition's **Return** value — only non-null if you called `SetFunctionReturn(...)`
+    when building the CreateFunction body.
+    """
+    baseNode = AddNode("Function", name)
+    for i, p in enumerate((param1, param2, param3, param4)):
+        if p is None:
+            continue
+        src = parseLiteral(p)
+        out_ports = [pt["id"] for pt in src.data["serializablePorts"] if pt["polarity"] != 0]
+        out_idx = (p.outputIndex if isinstance(p, Node) else 1) - 1
+        out_id = out_ports[out_idx]
+        ConnectPorts((out_id, f"Any{i + 1}"), src, baseNode)
+    return Node(baseNode.data, 1)
+
+
+# ---------------------------------------------------------------------------
+# Soccer simulation
+# ---------------------------------------------------------------------------
+
+@cache
+def SoccerController(player: int, move_to: Node, sprint: Node, interact: Node):
+    """Controls soccer team player `player` (1–4). `interact` is Bool2: hold to charge
+    shot / tackle; release while charged (with ball) shoots along that frame's move input."""
+    if player not in (1, 2, 3, 4):
+        raise ValueError(f"SoccerController player must be 1..4, got {player}")
+    baseNode = AddNode(f"SoccerController{player}")
+    connectInputNodes(baseNode, ["Vector3", "Bool", "Bool"], [move_to, sprint, interact])
+    return baseNode
+
+
+@cache
+def SoccerPlayerSensors(player: int, spherecast: Node) -> RaycastHitComponents:
+    """Eight-way spherecasts around team player `player` (1–4). Hits map to letters A–H
+    on the Player Sensor node graphic (RaycastHit1=A … RaycastHit8=H)."""
+    if player not in (1, 2, 3, 4):
+        raise ValueError(f"SoccerPlayerSensors player must be 1..4, got {player}")
+    baseNode = AddNode(f"SoccerPlayerSensors{player}")
+    connectInputNodes(baseNode, ["Spherecast"], [spherecast])
+    return RaycastHitComponents(baseNode)
+
+
+@cache
+def ConstructSoccerProperties(
+    name: str | Node,
+    country: countryNames | Node,
+    faceoff1: Node,
+    faceoff2: Node,
+    faceoff3: Node,
+    faceoff4: Node,
+):
+    """Sets team name, country, and faceoff positions for players 1–4."""
+    baseNode = AddNode("ConstructSoccerProperties")
+    connectInputNodes(
+        baseNode,
+        ["String", "Country", "Vector3", "Vector3", "Vector3", "Vector3"],
+        [name, country, faceoff1, faceoff2, faceoff3, faceoff4],
+    )
+    return baseNode
+
+
+def InitializeSoccer(
+    name: str,
+    country: countryNames,
+    faceoff1: Node,
+    faceoff2: Node,
+    faceoff3: Node,
+    faceoff4: Node,
+):
+    """Convenience wrapper around `ConstructSoccerProperties`."""
+    return ConstructSoccerProperties(
+        String(name),
+        Country(country),
+        faceoff1,
+        faceoff2,
+        faceoff3,
+        faceoff4,
+    )
+
+
+@cache
+def SoccerGetBool(value: int | str):
+    """Soccer bool accessor. Pass dropdown index or label (see README / DROPDOWN_OPTIONS)."""
+    return AddNode("SoccerGetBool", value)
+
+
+@cache
+def SoccerGetFloat(value: int | str):
+    """Soccer float accessor. Pass dropdown index or label (see README / DROPDOWN_OPTIONS)."""
+    return AddNode("SoccerGetFloat", value)
+
+
+@cache
+def SoccerGetTransform(value: int | str):
+    """Soccer transform accessor. Pass dropdown index or label (see README / DROPDOWN_OPTIONS)."""
+    return AddNode("SoccerGetTransform", value)
+
+
+@cache
+def SoccerGetVector3(value: int | str):
+    """Soccer Vector3 accessor (clear directions, landmarks, open players, etc.).
+    Pass dropdown index or label (see README / DROPDOWN_OPTIONS)."""
+    return AddNode("SoccerGetVector3", value)
+
+
+# ---------------------------------------------------------------------------
+# RacingV2 simulation
+# ---------------------------------------------------------------------------
+
+@cache
+def ConstructRacingV2Properties(
+    name: str | Node,
+    country: countryNames | Node,
+    skinColor: colorNames | Node,
+    bodyStyle: int | float | Node,
+    hairStyle: int | float | Node,
+    hairColor: colorNames | Node,
+    facialHairStyle: int | float | Node,
+    carColor: colorNames | Node,
+    outfitUrl: str | Node,
+    speed_stat: Node,
+    turn_stat: Node,
+    health_stat: Node,
+):
+    """RacingV2 cosmetics + 20-point Stat budget (Stat1 speed, Stat2 turn, Stat3 health)."""
+    baseNode = AddNode("ConstructRacingV2Properties")
+    connectInputNodes(
+        baseNode,
+        ["String", "Country", "Color", "Float", "Float", "Color", "Float", "Color", "String", "Stat", "Stat", "Stat"],
+        [
+            name,
+            country,
+            skinColor,
+            bodyStyle,
+            hairStyle,
+            hairColor,
+            facialHairStyle,
+            carColor,
+            outfitUrl,
+            speed_stat,
+            turn_stat,
+            health_stat,
+        ],
+    )
+    return baseNode
+
+
+def InitializeRacingV2(
+    name: str,
+    country: countryNames,
+    skin_color: colorNames,
+    body_style: int | float,
+    hair_style: int | float,
+    hair_color: colorNames,
+    facial_hair_style: int | float,
+    car_color: colorNames,
+    custom_texture: str,
+    speed: int | str = 5,
+    turn: int | str = 5,
+    health: int | str = 5,
+):
+    """Convenience initializer for RacingV2 (cosmetics + Stat points). Returns the properties node."""
+    return ConstructRacingV2Properties(
+        String(name),
+        Country(country),
+        Color(skin_color),
+        Float(body_style),
+        Float(hair_style),
+        Color(hair_color),
+        Float(facial_hair_style),
+        Color(car_color),
+        String(custom_texture),
+        Stat(speed),
+        Stat(turn),
+        Stat(health),
+    )
+
+
+@cache
+def RacingV2GetFloat(value: int | str):
+    """RacingV2 float accessor. Pass dropdown index or label."""
+    return AddNode("RacingV2GetFloat", value)
+
+
+@cache
+def RacingV2GetBool(value: int | str):
+    """RacingV2 bool accessor. Pass dropdown index or label."""
+    return AddNode("RacingV2GetBool", value)
+
+
+@cache
+def RacingV2GetCar(mode: int | str, index_float: Node | None = None):
+    """RacingV2 car selector (modes 0–26, same shape as DemoDerbyGetCar). Pass `index_float` for by-index / by-rank."""
+    baseNode = AddNode("RacingV2GetCar", mode)
+    if index_float is not None:
+        connectInputNodes(baseNode, ["Float"], [index_float])
+    return baseNode
+
+
+@cache
+def RacingV2GetWaypoint(value: int | str, index_float: Node | None = None):
+    """RacingV2 waypoint selector: Next / Previous / By index / Start. Pass `index_float` for By index."""
+    baseNode = AddNode("RacingV2GetWaypoint", value)
+    if index_float is not None:
+        connectInputNodes(baseNode, ["Float"], [index_float])
+    return baseNode
+
+
+class RacingV2WaypointComponents:
+    """Vector3 + index outputs from `RacingV2Waypoint`."""
+
+    def __init__(self, baseNode: Node):
+        self._baseNode = baseNode
+
+    @property
+    def Position(self) -> Node:
+        return Node(self._baseNode.data, 1)
+
+    @property
+    def Index(self) -> Node:
+        return Node(self._baseNode.data, 2)
+
+    def __iter__(self):
+        yield self.Position
+        yield self.Index
+
+    def __len__(self):
+        return 2
+
+
+@cache
+def RacingV2Waypoint(
+    mode: int | str,
+    waypoint: Node | None = None,
+    reference_transform: Node | None = None,
+) -> RacingV2WaypointComponents:
+    """Resolves a waypoint to Center / Left / Right / Nearest point. Returns `.Position` and `.Index`."""
+    baseNode = AddNode("RacingV2Waypoint", mode)
+    if waypoint is not None:
+        connectInputNodes(baseNode, ["Waypoint"], [waypoint])
+    if reference_transform is not None:
+        connectInputNodes(baseNode, ["Transform"], [reference_transform])
+    return RacingV2WaypointComponents(baseNode)
+
+
 def connectInputNodes(baseNode, inputTypes, inputs):
     counters = {}
 
@@ -1344,6 +1708,15 @@ def connectInputNodes(baseNode, inputTypes, inputs):
             if isinstance(inputType, tuple):
                 portName1 = f"{inputType[0]}{num1}"
                 portName2 = f"{inputType[1]}{num2}"
+            # CreateFunction / Relay / GetVariable expose Any* outs that feed typed inputs.
+            if portName1 not in inputNode.outputPorts:
+                outputPorts = [
+                    p["id"]
+                    for p in inputNode.data["serializablePorts"]
+                    if p["polarity"] != 0
+                ]
+                if 0 <= num1 - 1 < len(outputPorts):
+                    portName1 = outputPorts[num1 - 1]
 
         if inputData is not None:
             ConnectPorts((portName1, portName2), inputNode, baseNode)
