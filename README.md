@@ -2002,6 +2002,54 @@ Search order prioritizes the team’s attacking direction:
 - In **extra time**, the receiving team is the **opposite** of who kicked off at match start
 - On **whistle** (stale ball / no meaningful movement after time), kickoff flips to the **opposite** of who last received a kickoff
 
+### Constants
+
+Live values from the Soccer scene / player prefab. Several are also exposed as `SoccerGetFloat` labels (listed in parentheses).
+
+**Field**
+- Field width (sideline to sideline): **50** (`"Field Width"`)
+- Field depth (goal line to goal line): **80** (`"Field Depth"`)
+- Kickoff / center circle radius: **7.25** (`"Kickoff Circle Radius"`)
+- Goal width: **11.4** (`"Goal Width"`)
+- Goal height: **4** (`"Goal Height"`)
+- Players per team: **4**
+
+**Movement**
+- Walk / run speed: **7**
+- Sprint speed: **8** (requires available stamina)
+
+**Stamina**
+- Max stamina: **100**
+- Sprint consume: **0.15** per simulation tick while sprinting
+- Regen rate: **5** stamina per second (after the regen delay)
+- Default regen delay (cooldown): **1** second
+- Tackle / contested-steal regen delay: **1.5** seconds (applied to both players in the contest)
+
+**Match & interaction**
+- Match duration: **180** seconds of playing time
+- Kickoff restriction delay: **1** second (or until first touch)
+- Player interact / tackle / pickup radius: **1.75** (`"Player Interact Radius"`)
+- Shot charge rate: **0.1** per tick; min charge to shoot **0.1**; max charge time **2** s
+- Shot strength range: **0.5**–**15** (plus max lift **3**)
+- Shot cooldown: **0.5** s
+- Pickup charge delay after gaining the ball: **0.3** s
+- Stale-ball whistle: ball stays within **2.5** of its anchor for **5** s
+
+**Ball physics** (from `SoccerBall` prefab + project Physics settings)
+- Mass: **0.45**
+- Linear damping: **0**
+- Angular damping: **0**
+- Use gravity: **yes** (project gravity is **(0, −20, 0)** — heavier than Unity’s default −9.81)
+- Max linear speed clamp: **30** m/s
+- Rigidbody rotation: **frozen** (rolling is visual only)
+- Collision detection: **Discrete**
+- Sphere collider radius: **~0.406** world units (prefab radius 0.4515 × scale 0.9)
+- Physics Material on ball / typical field colliders: **none assigned**
+  - Project default material is also none, so contacts use Unity’s built-in defaults: **dynamic/static friction 0.6**, **bounciness 0**
+  - Bounce threshold: **2**
+- Shot impulse: release sets `velocity = force / mass` (then clamped to max speed); upward shot bias component **3**
+- Pickup lockout after shot (shooter only): **0.125** s; after possession exchange: **0.25** s
+
 Pass a dropdown **index** (`0`, `1`, …) or the exact Unity **label** string below. Order matches Unity and `DROPDOWN_OPTIONS` in `data.py`.
 
 <a id="soccergetbool-values"></a>
