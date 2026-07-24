@@ -478,9 +478,6 @@ def Debug(inputData, string: str = None, changePosition=True):
         xPos = 1263 - 64 * 6
         yPos = -278 - 64 * 4 * debugCounter
         baseNode = AddNode("Debug", position=Position3(xPos, yPos - 55))
-        data["serializableNodes"][-1]["serializablePorts"][0][
-            "serializableRectTransform"
-        ]["scale"] = Position3(0, 0)
         if string is not None:
             AddNode(
                 "String", string, includePorts=False, position=Position3(xPos, yPos)
