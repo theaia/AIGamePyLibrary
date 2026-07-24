@@ -240,7 +240,6 @@ DROPDOWN_OPTIONS: dict[str, tuple[str, ...]] = {
         "Opponent Attacking %",
         "Ball Speed",
         "Player Interact Radius",
-        "Player With Ball Shot Charge %",
         "Ball Carrier Stamina",
         "Ball Carrier Shot Charge",
         "Teammate 1 Shot Charge",
