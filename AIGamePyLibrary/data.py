@@ -69,6 +69,7 @@ NODE_SIZES = {
     "RacingV2GetWaypoint": (320, 64),
     "RacingV2Waypoint": (256, 96),
     "ConstructRacingV2Properties": (192, 320),
+    "Stat": (256, 64),
 }
 DEFAULT_NODE_SIZE = (256, 64)
 
@@ -763,6 +764,7 @@ ports = {
         {"id": "RaycastHit1", "polarity": 0},
         {"id": "Bool1", "polarity": 1},
         {"id": "Float1", "polarity": 1},
+        {"id": "String1", "polarity": 1},
     ],
     "ParkingGetFloat": [{"id": "Float1", "polarity": 1}],
     "ParkingGetBool": [{"id": "Bool1", "polarity": 1}],

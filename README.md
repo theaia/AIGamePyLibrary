@@ -1472,8 +1472,9 @@ Alignment to the stall is encouraged but not required. Colliding with any object
       </td>
       <td valign="top">
         <ul>
-          <li style="margin: 0 0 8px 0;"><a href="#datatype-bool"><code>Bool1</code></a> — <sub>Was a collision detected?</sub></li>
-          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>The collision distance (infinity if no collision)</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-bool"><code>Bool1</code></a> — <sub>Was a collision detected? (<code>.WasHit</code>)</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>The collision distance (infinity if no collision) (<code>.Distance</code>)</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-string"><code>String1</code></a> — <sub>Hit collider tag (<code>.Tag</code>)</sub></li>
         </ul>
       </td>
       <td valign="top">—</td>
@@ -2101,6 +2102,8 @@ Lap racing on additive **V2** tracks using the modular car stack. Default **3** 
 
 **Save folder:** `RacingV2/`
 
+**Unity node list:** `Assets/_Nodes/Lists/RacingV2.asset`
+
 </details>
 
 <details>
@@ -2111,12 +2114,14 @@ Lap racing on additive **V2** tracks using the modular car stack. Default **3** 
 - Sensors: `Spherecast` → `CarRaycasts` → `HitInfo` (shared stack)
 - Optional helpers: `Autosteer`, `Autothrottle`, `CarGetPart`, `CarInfo` (same multi-output wiring caveat as Demo Derby)
 - Race state: `RacingV2GetFloat` / `RacingV2GetBool` / `RacingV2GetCar` / `RacingV2GetWaypoint` / `RacingV2Waypoint`
+- Stat points via `Stat(...)` into the three Properties Stat ports
 
 </details>
 
 <details>
 <summary><strong>Nodes</strong></summary>
 
+<!-- Full list from RacingV2.asset (serialization keys in Notes where they differ from the Python name) -->
 <table>
   <thead>
     <tr>
@@ -2129,51 +2134,136 @@ Lap racing on additive **V2** tracks using the modular car stack. Default **3** 
   </thead>
   <tbody>
     <tr>
-      <td valign="top"><code>InitializeRacingV2(..., speed, turn, health)</code></td>
-      <td valign="top">Cosmetics + Stat1/2/3 (20-point budget → speed / turn / health)</td>
-      <td valign="top">Same cosmetics as Parking, plus three <code>Stat</code> inputs</td>
+      <td valign="top"><code>ModularUniformController(throttle, steering, brake)</code></td>
+      <td valign="top">Sends throttle / steering / brake to the car</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>Throttle</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float2</code></a> — <sub>Steering</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float3</code></a> — <sub>Brake</sub></li>
+        </ul>
+      </td>
       <td valign="top">—</td>
-      <td valign="top">Unity key <code>ConstructRacingV2Properties</code></td>
+      <td valign="top">Destination. Unity key <code>ModularCarController</code>. Same as Parking / Demo Derby.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>InitializeRacingV2(name, country, skinColor, bodyStyle, hairStyle, hairColor, facialHairStyle, carColor, outfitUrl, speed, turn, health)</code></td>
+      <td valign="top">Convenience cosmetics + Stat1/2/3 (20-point budget → speed / turn / health)</td>
+      <td valign="top">Same nine cosmetics as Parking, plus three <code>Stat</code> values (ints or <code>Stat(...)</code> nodes)</td>
+      <td valign="top">—</td>
+      <td valign="top">Wraps <code>ConstructRacingV2Properties</code>. Set <code>props.data["modifier"] = "True"</code> for LLM flag.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>ConstructRacingV2Properties(..., speed_stat, turn_stat, health_stat)</code></td>
+      <td valign="top">Destination Properties node (cosmetics + stats)</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;">Cosmetics ports match Parking <code>ConstructModularUniformProperties</code></li>
+          <li style="margin: 0 0 8px 0;"><code>Stat1</code> / <code>Stat2</code> / <code>Stat3</code> — <sub>Speed / turn / health points</sub></li>
+        </ul>
+      </td>
+      <td valign="top">—</td>
+      <td valign="top">Unity asset display name <code>ConstructRacingProperties</code>; serialization key <code>ConstructRacingV2Properties</code></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>Stat(value)</code></td>
+      <td valign="top">Constant stat-point value for Properties Stat ports</td>
+      <td valign="top">—</td>
+      <td valign="top"><ul><li style="margin: 0 0 8px 0;"><code>Stat1</code> — <sub>The stat</sub></li></ul></td>
+      <td valign="top"><code>value</code> is <code>int</code> or <code>str</code> (stored in <code>modifier</code>). Also used by Volleyball slime stats.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>Spherecast(radius, distance)</code></td>
+      <td valign="top">Defines radius / max distance for car sensors</td>
+      <td valign="top"><a href="#datatype-float"><code>Float1</code></a>, <a href="#datatype-float"><code>Float2</code></a></td>
+      <td valign="top"><a href="#datatype-spherecast"><code>Spherecast1</code></a></td>
+      <td valign="top">Feed into <code>CarRaycasts</code>. Full I/O under <strong>Parking Simulation</strong>.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>CarRaycasts(spherecast)</code></td>
+      <td valign="top">Eight spherecast sensors around the car</td>
+      <td valign="top"><a href="#datatype-spherecast"><code>Spherecast1</code></a></td>
+      <td valign="top"><a href="#datatype-raycasthit"><code>RaycastHit1</code></a>…<code>8</code></td>
+      <td valign="top">Full I/O under <strong>Parking Simulation</strong>.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>HitInfo(raycastHit)</code></td>
+      <td valign="top">Unpacks a RaycastHit</td>
+      <td valign="top"><a href="#datatype-raycasthit"><code>RaycastHit1</code></a></td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-bool"><code>Bool1</code></a> — <sub><code>.WasHit</code></sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub><code>.Distance</code></sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-string"><code>String1</code></a> — <sub><code>.Tag</code> (collider tag)</sub></li>
+        </ul>
+      </td>
+      <td valign="top">Shared with Parking / Demo Derby / Soccer.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>Autosteer(goal)</code></td>
+      <td valign="top">Steer toward a world-space goal</td>
+      <td valign="top"><a href="#datatype-vector3"><code>Vector31</code></a></td>
+      <td valign="top"><a href="#datatype-float"><code>Float1</code></a> — <sub>Steering</sub></td>
+      <td valign="top">Same as Demo Derby / Parking.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>Autothrottle(goal, desired_speed)</code></td>
+      <td valign="top">Throttle toward a goal at a target speed (obstacle-aware)</td>
+      <td valign="top"><a href="#datatype-vector3"><code>Vector31</code></a>, <a href="#datatype-float"><code>Float1</code></a></td>
+      <td valign="top"><a href="#datatype-float"><code>Float1</code></a> — <sub>Throttle</sub></td>
+      <td valign="top">Unity asset name <code>AutoThrottle</code>; serialization key <code>Autothrottle</code>.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>CarGetPart(mode, car)</code></td>
+      <td valign="top">Pick a part of a car (aim point, weakpoint, etc.)</td>
+      <td valign="top"><a href="#datatype-car"><code>Car1</code></a></td>
+      <td valign="top"><a href="#datatype-transform"><code>Transform1</code></a> (<code>.PartTransform</code>), <a href="#datatype-float"><code>Float1</code></a> (<code>.HealthPercent</code>)</td>
+      <td valign="top">Unity key <code>GetCarPart</code>. Modes under <a href="#cargetpart-modes">Demo Derby</a>. Prefer <code>.PartTransform</code> only (see accessor warnings).</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>CarInfo(car)</code></td>
+      <td valign="top">Multi-output car info helper</td>
+      <td valign="top"><a href="#datatype-car"><code>Car1</code></a></td>
+      <td valign="top"><code>.CarTransform</code>, <code>.Velocity</code>, <code>.IsAI</code>, <code>.IsImmobile</code>, <code>.Health</code>, <code>.Rank</code></td>
+      <td valign="top"><a href="#carinfo-accessor-warnings"><strong>Notes</strong></a> — prefer <code>.CarTransform</code> + getters over non-Transform outputs.</td>
     </tr>
     <tr>
       <td valign="top"><code>RacingV2GetFloat(value)</code></td>
-      <td valign="top">Speed, waypoints, rank, laps, sim time, …</td>
+      <td valign="top">Global race / sim float state</td>
       <td valign="top">—</td>
-      <td valign="top"><code>Float1</code></td>
-      <td valign="top">Index or label (see DROPDOWN_OPTIONS)</td>
+      <td valign="top"><a href="#datatype-float"><code>Float1</code></a></td>
+      <td valign="top">Index or label — see <a href="#racingv2getfloat-values">all values</a></td>
     </tr>
     <tr>
       <td valign="top"><code>RacingV2GetBool(value)</code></td>
-      <td valign="top">Grounded / disabled / sim started</td>
+      <td valign="top">Global race / sim bool state</td>
       <td valign="top">—</td>
-      <td valign="top"><code>Bool1</code></td>
+      <td valign="top"><a href="#datatype-bool"><code>Bool1</code></a></td>
       <td valign="top"><code>Is Grounded</code>, <code>Is Disabled</code>, <code>Simulation started</code></td>
     </tr>
     <tr>
       <td valign="top"><code>RacingV2GetCar(mode, index_float=None)</code></td>
-      <td valign="top">Select a car (modes 0–26, same shape as DemoDerbyGetCar)</td>
+      <td valign="top">Select a car reference (modes 0–26, same shape as <code>DemoDerbyGetCar</code>)</td>
       <td valign="top">Optional Float for by-index / by-rank</td>
-      <td valign="top"><code>Car1</code></td>
-      <td valign="top">Rank uses race scoreboard</td>
+      <td valign="top"><a href="#datatype-car"><code>Car1</code></a></td>
+      <td valign="top">Rank uses the race scoreboard — see <a href="#racingv2getcar-modes">modes</a></td>
     </tr>
     <tr>
       <td valign="top"><code>RacingV2GetWaypoint(value, index_float=None)</code></td>
-      <td valign="top">Next / Previous / By index / Start waypoint</td>
-      <td valign="top">Optional Float for By index</td>
-      <td valign="top"><code>Waypoint1</code></td>
-      <td valign="top">Feed into <code>RacingV2Waypoint</code></td>
+      <td valign="top">Select a track waypoint</td>
+      <td valign="top">Optional Float for <code>By index</code></td>
+      <td valign="top"><a href="#datatype-waypoint"><code>Waypoint1</code></a></td>
+      <td valign="top"><code>Next waypoint</code>, <code>Previous waypoint</code>, <code>By index</code>, <code>Start waypoint</code></td>
     </tr>
     <tr>
       <td valign="top"><code>RacingV2Waypoint(mode, waypoint, ref=None)</code></td>
       <td valign="top">Resolve a waypoint to a world point</td>
-      <td valign="top">Waypoint (+ optional Transform for Nearest)</td>
+      <td valign="top"><a href="#datatype-waypoint"><code>Waypoint1</code></a> (+ optional <a href="#datatype-transform"><code>Transform1</code></a> for Nearest)</td>
       <td valign="top"><code>.Position</code> (Vector3), <code>.Index</code> (Float)</td>
-      <td valign="top">Center / Left / Right / Nearest point</td>
+      <td valign="top"><code>Center</code>, <code>Left</code>, <code>Right</code>, <code>Nearest point</code></td>
     </tr>
   </tbody>
 </table>
-
-Shared modular nodes are documented under **Parking Simulation** and **Demo Derby Simulation** (`ModularUniformController`, `CarRaycasts`, `Autosteer`, `Autothrottle`, …).
 
 </details>
 
@@ -2182,11 +2272,39 @@ Shared modular nodes are documented under **Parking Simulation** and **Demo Derb
 
 ### Stats
 
-`ConstructRacingV2Properties` takes **Stat1** (speed), **Stat2** (turn), **Stat3** (health) with a sequential **20-point** budget (typical mapping: max speed ~20–60, turn ~0.5–2.0, health fraction of baseline).
+`ConstructRacingV2Properties` takes **Stat1** (speed), **Stat2** (turn), **Stat3** (health) with a sequential **20-point** budget (typical mapping: max speed ~20–60, turn ~0.5–2.0, health fraction of baseline). Prefer `InitializeRacingV2(..., speed, turn, health)` which builds the three `Stat(...)` nodes for you.
 
-### RacingV2GetFloat options
+<a id="racingv2getfloat-values"></a>
 
-`Speed`, `Signed Speed (forward +, reverse −)`, waypoint indices/distances, `Current race rank`, `Number of competitors`, lap times, `Current lap` / `Total laps`, sim time, `Delta Time`, `Pi`, …
+### RacingV2GetFloat values
+
+| Index | Label |
+|------:|-------|
+| 0 | `Speed` |
+| 1 | `Signed Speed (forward +, reverse −)` |
+| 2 | `Index of next waypoint` |
+| 3 | `Index of previous waypoint` |
+| 4 | `Waypoint count` |
+| 5 | `Current race rank` |
+| 6 | `Number of competitors` |
+| 7 | `Distance to next waypoint` |
+| 8 | `Distance to previous waypoint` |
+| 9 | `Current lap time` |
+| 10 | `Best lap time` |
+| 11 | `Total race time` |
+| 12 | `Current lap` |
+| 13 | `Total laps` |
+| 14 | `Current Simulation Time` |
+| 15 | `Max Simulation Time` |
+| 16 | `Delta Time` |
+| 17 | `Fixed Delta Time` |
+| 18 | `Pi` |
+
+<a id="racingv2getcar-modes"></a>
+
+### RacingV2GetCar modes
+
+Same index layout as [DemoDerbyGetCar](#demoderbygetcar-modes); ranking comes from the **race** scoreboard (not derby damage). Pass `index_float` for modes `0` (by index) and `1` (by rank).
 
 ### Tips
 
@@ -2335,7 +2453,7 @@ Volleyball bots control a slime character to move and jump based on the current 
     </tr>
     <tr>
       <td valign="top"><code>Stat(value)</code></td>
-      <td valign="top">Create a Stat node (used for slime properties)</td>
+      <td valign="top">Create a Stat node (slime properties and RacingV2 Properties Stat ports)</td>
       <td valign="top">—</td>
       <td valign="top"><ul><li style="margin: 0 0 8px 0;"><code>Stat1</code> — <sub>The stat</sub></li></ul></td>
       <td valign="top"><code>value</code> can be <code>int</code> or <code>str</code></td>
@@ -2628,6 +2746,17 @@ This section is the “type dictionary” that port keys link to (for example: c
 - **Type**: Car
 - **Ports**: `Car1`, `Car2`, ...
 - **Meaning**: Car reference for Demo Derby / RacingV2 (selected via `DemoDerbyGetCar(...)` / `RacingV2GetCar(...)` or derived from a Transform).
+
+</details>
+
+<details>
+<summary><strong>Waypoint</strong></summary>
+
+<a id="datatype-waypoint"></a>
+
+- **Type**: Waypoint
+- **Ports**: `Waypoint1`, `Waypoint2`, ...
+- **Meaning**: RacingV2 track waypoint reference from `RacingV2GetWaypoint(...)`. Resolve to a world `Vector3` with `RacingV2Waypoint(...).Position`.
 
 </details>
 

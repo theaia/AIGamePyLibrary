@@ -1032,15 +1032,19 @@ class RaycastHitComponents:
 
 
 class HitInfoComponents:
-    """Multi-output helper for `HitInfo` (WasHit, Distance)."""
+    """Multi-output helper for `HitInfo` (WasHit, Distance, Tag)."""
 
     def __init__(self, baseNode: Node):
         # We override `type` so Python operators work (==, <, arithmetic, etc.).
+        # Port ids are typed (Bool1 / Float1 / String1), so each uses outputIndex 1.
         self._wasHit = Node(baseNode.data, 1)
         self._wasHit.type = bool
 
         self._distance = Node(baseNode.data, 1)
         self._distance.type = float
+
+        self._tag = Node(baseNode.data, 1)
+        self._tag.type = str
 
     @property
     def WasHit(self) -> Node:
@@ -1050,8 +1054,13 @@ class HitInfoComponents:
     def Distance(self) -> Node:
         return self._distance
 
+    @property
+    def Tag(self) -> Node:
+        """Hit collider GameObject tag (`String1`); null/empty when no hit."""
+        return self._tag
+
     def __iter__(self):
-        """Allow tuple unpacking: was_hit, distance = HitInfo(raycast_hit)."""
+        """Allow tuple unpacking: was_hit, distance = HitInfo(raycast_hit). Use `.Tag` for the string."""
         yield self.WasHit
         yield self.Distance
 
