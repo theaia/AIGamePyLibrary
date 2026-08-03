@@ -16,6 +16,7 @@ from .data import (
     SERIALIZE_SIZE_DELTA_NODES,
     SERIALIZE_COLOR_NODES,
     DROPDOWN_OPTIONS,
+    DROPDOWN_MODIFIER_AS_LABEL,
 )
 from .utils import Position2, Position3, generateId
 
@@ -508,10 +509,10 @@ def _normalize_modifier(node_name: str, node_value):
     """
     Normalize `modifier` for nodes whose modifier is a dropdown selection.
 
-    - Accepts either an int index or a string label.
-    - Validates against `DROPDOWN_OPTIONS` when available.
-    - Converts to a stringified index, because Unity nodes store dropdown
-      selections in the `modifier` field as a string.
+    - `int` (not `bool`) → dropdown index, wrapped with ``% len(options)``.
+    - `str` → label lookup only (casefold); never parsed as an index.
+    - Most nodes emit a stringified index; label-storage nodes
+      (`DROPDOWN_MODIFIER_AS_LABEL`) emit the option text Unity matches on.
     """
     options = DROPDOWN_OPTIONS.get(node_name)
     if not options:
@@ -521,36 +522,29 @@ def _normalize_modifier(node_name: str, node_value):
         # Avoid treating bool as int.
         return node_value
 
+    n = len(options)
+    idx = None
+
     if isinstance(node_value, int):
-        if 0 <= node_value < len(options):
-            return str(node_value)
-        raise ValueError(
-            f"{node_name} dropdown index out of range: {node_value}. "
-            f"Valid range: 0..{len(options) - 1} ({', '.join(options)})"
-        )
-
-    if isinstance(node_value, str):
+        idx = node_value % n
+    elif isinstance(node_value, str):
         value_str = node_value.strip()
-        if value_str.isdigit():
-            idx = int(value_str)
-            if 0 <= idx < len(options):
-                return str(idx)
-            raise ValueError(
-                f"{node_name} dropdown index out of range: {value_str}. "
-                f"Valid range: 0..{len(options) - 1} ({', '.join(options)})"
-            )
-
         lowered = value_str.casefold()
         for i, opt in enumerate(options):
             if opt.casefold() == lowered:
-                return str(i)
+                idx = i
+                break
+        if idx is None:
+            raise ValueError(
+                f"{node_name} invalid selection: {node_value!r}. "
+                f"Valid selections: {', '.join(options)}"
+            )
+    else:
+        return node_value
 
-        raise ValueError(
-            f"{node_name} invalid selection: {node_value!r}. "
-            f"Valid selections: {', '.join(options)}"
-        )
-
-    return node_value
+    if node_name in DROPDOWN_MODIFIER_AS_LABEL:
+        return options[idx]
+    return str(idx)
 
 
 def AddNode(nodeName, nodeValue="", includePorts=True, position=None, ownerFunctionSID=""):

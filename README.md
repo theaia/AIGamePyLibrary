@@ -811,7 +811,7 @@ Node configurations determine which nodes are available in the Unity editor. Eac
           <li style="margin: 0 0 8px 0;"><a href="#datatype-bool"><code>Bool1</code></a> — <sub>Is the key pressed</sub></li>
         </ul>
       </td>
-      <td valign="top">Key is selected in dropdown</td>
+      <td valign="top">Pass <code>int</code> dropdown index (wraps) or KeyCode name string (e.g. <code>"Space"</code>, <code>"A"</code>). Keys are Unity <code>KeyCode</code> names, alphabetically sorted, excluding mouse buttons. Saved modifier is the key name.</td>
     </tr>
     <tr>
       <td valign="top"><code>RelativePosition(transform, direction)</code></td>
@@ -2051,7 +2051,7 @@ Live values from the Soccer scene / player prefab. Several are also exposed as `
 - Shot impulse: release sets `velocity = force / mass` (then clamped to max speed); upward shot bias component **3**
 - Pickup lockout after shot (shooter only): **0.125** s; after possession exchange: **0.25** s
 
-Pass a dropdown **index** (`0`, `1`, …) or the exact Unity **label** string below. Order matches Unity and `DROPDOWN_OPTIONS` in `data.py`.
+Pass a dropdown **index** (`0`, `1`, …) or the exact Unity **label** string below. Order matches Unity and `DROPDOWN_OPTIONS` in `data.py`. Out-of-range **int** indices wrap at compile time (`index % option_count`); digit strings are **not** treated as indices — use an `int` for index or the label string for name lookup. This int-or-label + wrap rule applies to all dropdown nodes in the library.
 
 <a id="soccergetbool-values"></a>
 
@@ -2734,7 +2734,7 @@ This section is the “type dictionary” that port keys link to (for example: c
 
 - **Type**: SurvivalEmote
 - **Ports**: `SurvivalEmote1`, `SurvivalEmote2`, ...
-- **Meaning**: Survival simulation emote enum.
+- **Meaning**: Survival simulation emote enum (`None`, `Hi`, `Talk`, `Bored`, `Wave`, `Dance2`). Pass index or label.
 
 </details>
 

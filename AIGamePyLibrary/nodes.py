@@ -331,7 +331,8 @@ def ClampFloat(node0: Node, node1: Node, node2: Node):
 
 
 @cache
-def Color(value: colorNames):
+def Color(value: int | colorNames):
+    """Color dropdown. Pass index (wraps) or color label."""
     return AddNode("Color", value)
 
 
@@ -347,9 +348,9 @@ def Vector3(node0: Node, node1: Node, node2: Node):
 def CompareBool(
     node0: Node,
     node1: Node,
-    value: Literal["and", "or", "equal to", "xor", "nor", "nand", "xnor"] = "and",
+    value: int
+    | Literal["and", "or", "equal to", "xor", "nor", "nand", "xnor"] = "and",
 ):
-    value = ["and", "or", "equal to", "xor", "nor", "nand", "xnor"].index(value)
     baseNode = AddNode("CompareBool", value)
     inputTypes = ["Bool", "Bool"]
     connectInputNodes(baseNode, inputTypes, [node0, node1])
@@ -358,9 +359,10 @@ def CompareBool(
 
 @cache
 def CompareFloats(
-    node0: Node, node1: Node, value: Literal["==", "<", ">", "<=", ">="] = "=="
+    node0: Node,
+    node1: Node,
+    value: int | Literal["==", "<", ">", "<=", ">="] = "==",
 ):
-    value = ["==", "<", ">", "<=", ">="].index(value)
     baseNode = AddNode("CompareFloats", value)
     inputTypes = ["Float", "Float"]
     connectInputNodes(baseNode, inputTypes, [node0, node1])
@@ -453,7 +455,8 @@ def SlimeController(node0: Node, node1: Node):
 
 
 @cache
-def Country(value: countryNames):
+def Country(value: int | countryNames):
+    """Country dropdown. Pass index (wraps) or country label."""
     return AddNode("Country", value)
 
 
@@ -581,26 +584,27 @@ def IsNull(node0: Node):
 
 
 @cache
-def Keypress(value: int):
-    """Indicates whether the selected key is currently pressed. Pass key index (0-based)."""
-    return AddNode("Keypress", str(value))
+def Keypress(value: int | str):
+    """Whether the selected key is pressed. Pass dropdown index (int, wraps) or KeyCode name (str)."""
+    return AddNode("Keypress", value)
 
 
 @cache
 def VolleyballGetBool(
-    value: Literal["Self Can Jump", "Opponent Can Jump", "Ball Is Self Side"],
+    value: int
+    | Literal["Self Can Jump", "Opponent Can Jump", "Ball Is Self Side"],
 ):
     """Volleyball bool accessor. Maps to the `VolleyballGetBool` Unity node
     (see `Assets/_Nodes/VolleyballGetBool.asset`). Only valid inside a
     Volleyball graph — other sims use `SurvivalGetBool` / `ParkingGetBool` /
     `DemoDerbyGetBool`."""
-    value = ["Self Can Jump", "Opponent Can Jump", "Ball Is Self Side"].index(value)
     return AddNode("VolleyballGetBool", value)
 
 
 @cache
 def VolleyballGetFloat(
-    value: Literal[
+    value: int
+    | Literal[
         "Delta time",
         "Fixed delta time",
         "Gravity",
@@ -615,22 +619,13 @@ def VolleyballGetFloat(
     node (see `Assets/_Nodes/VolleyballGetFloat.asset`). Only valid inside a
     Volleyball graph — other sims use `SurvivalGetFloat` /
     `ParkingGetFloat` / `DemoDerbyGetFloat`."""
-    value = [
-        "Delta time",
-        "Fixed delta time",
-        "Gravity",
-        "Pi",
-        "Simulation duration",
-        "Team score",
-        "Opponent score",
-        "Ball touches remaining",
-    ].index(value)
     return AddNode("VolleyballGetFloat", value)
 
 
 @cache
 def VolleyballGetTransform(
-    value: Literal[
+    value: int
+    | Literal[
         "Self", "Opponent", "Ball", "Self Team Spawn", "Opponent Team Spawn"
     ],
 ):
@@ -638,19 +633,13 @@ def VolleyballGetTransform(
     Unity node (see `Assets/_Nodes/VolleyballGetTransform.asset`). Only valid
     inside a Volleyball graph — other sims use `SurvivalGetTransform` /
     `ParkingGetTransform` / `DemoDerbyGetTransform`."""
-    value = [
-        "Self",
-        "Opponent",
-        "Ball",
-        "Self Team Spawn",
-        "Opponent Team Spawn",
-    ].index(value)
     return AddNode("VolleyballGetTransform", value)
 
 
 @cache
 def VolleyballGetVector3(
-    value: Literal[
+    value: int
+    | Literal[
         "Self Position",
         "Self Velocity",
         "Ball Position",
@@ -666,14 +655,6 @@ def VolleyballGetVector3(
     `RelativePosition(transform_node, "Self")` on sim-specific transform
     helpers (`SurvivalGetTransform`, `DemoDerbyGetTransform`,
     `CarGetPart(...).PartTransform`, etc.)."""
-    value = [
-        "Self Position",
-        "Self Velocity",
-        "Ball Position",
-        "Ball Velocity",
-        "Opponent Position",
-        "Opponent Velocity",
-    ].index(value)
     return AddNode("SlimeGetVector3", value)
 
 
@@ -753,7 +734,8 @@ def Normalize(node0: Node):
 @cache
 def Operation(
     node0: Node,
-    value: Literal[
+    value: int
+    | Literal[
         "abs",
         "round",
         "floor",
@@ -772,24 +754,6 @@ def Operation(
         "10^",
     ],
 ):
-    value = [
-        "abs",
-        "round",
-        "floor",
-        "ceil",
-        "sin",
-        "cos",
-        "tan",
-        "asin",
-        "acos",
-        "atan",
-        "sqrt",
-        "sign",
-        "ln",
-        "log10",
-        "e^",
-        "10^",
-    ].index(value)
     baseNode = AddNode("Operation", value)
     inputTypes = ["Float"]
     connectInputNodes(baseNode, inputTypes, [node0])
@@ -799,7 +763,8 @@ def Operation(
 @cache
 def RelativePosition(
     node0: Node,
-    value: Literal[
+    value: int
+    | Literal[
         "Self",
         "Self + Forward",
         "Self + Backward",
@@ -813,23 +778,9 @@ def RelativePosition(
         "Right",
         "Up",
         "Down",
+        "World",
     ],
 ):
-    value = [
-        "Self",
-        "Self + Forward",
-        "Self + Backward",
-        "Self + Left",
-        "Self + Right",
-        "Self + Up",
-        "Self + Down",
-        "Forward",
-        "Backward",
-        "Left",
-        "Right",
-        "Up",
-        "Down",
-    ].index(value)
     baseNode = AddNode("RelativePosition", value)
     inputTypes = ["Transform"]
     connectInputNodes(baseNode, inputTypes, [node0])
@@ -937,32 +888,32 @@ def SurvivalController(node0: Node, node1: Node, node2: Node, node3: Node):
 
 
 @cache
-def SurvivalEmote(value: int):
-    """Selection of emotes. 0=None, 1=Hi, 2=Talk, 3=Bored, 4=Wave."""
-    return AddNode("SurvivalEmote", str(value))
+def SurvivalEmote(value: int | str):
+    """Emote dropdown. Pass index (wraps) or label: None, Hi, Talk, Bored, Wave, Dance2."""
+    return AddNode("SurvivalEmote", value)
 
 
 @cache
-def SurvivalGetBool(value: int):
-    """Selection of bool options. 0=Is Carrying Resource, 1=Container has Health, 2=Container Was Attacked, 3=Container Was Stolen From, 4=Self Was Attacked."""
-    return AddNode("SurvivalGetBool", str(value))
+def SurvivalGetBool(value: int | str):
+    """Selection of bool options. Pass index or label (see README / DROPDOWN_OPTIONS)."""
+    return AddNode("SurvivalGetBool", value)
 
 
 @cache
-def SurvivalGetFloat(value: int):
-    """Selection of float options (Health %, Hunger %, Stamina %, etc.). See README for full list."""
-    return AddNode("SurvivalGetFloat", str(value))
+def SurvivalGetFloat(value: int | str):
+    """Selection of float options (Health %, Hunger %, Stamina %, etc.). Pass index or label."""
+    return AddNode("SurvivalGetFloat", value)
 
 
 @cache
-def SurvivalGetTransform(value: int):
-    """Selection of Transform options (Self, Player Nearest, etc.). See README for full list."""
-    return AddNode("SurvivalGetTransform", str(value))
+def SurvivalGetTransform(value: int | str):
+    """Selection of Transform options (Self, Player Nearest, etc.). Pass index or label."""
+    return AddNode("SurvivalGetTransform", value)
 
 
 @cache
-def SurvivalState(value: str):
-    """Selection of states. Use enum name: 'Passive', 'Gather', 'Eat', 'Attack', 'Steal', 'Dead'."""
+def SurvivalState(value: int | str):
+    """State dropdown. Pass index (wraps) or name: Passive, Gather, Eat, Attack, Steal, Dead."""
     return AddNode("SurvivalState", value)
 
 
@@ -1220,14 +1171,14 @@ def HitInfo(raycastHit: Node) -> HitInfoComponents:
 
 
 @cache
-def DemoDerbyGetTransform(value: int):
-    """Demo Derby: `0` self car body, `1` fixed reference (inspector), `2` random pathable waypoint."""
-    return AddNode("DemoDerbyGetTransform", str(value))
+def DemoDerbyGetTransform(value: int | str):
+    """Demo Derby: `0` Self, `1` Fixed Reference, `2` Random Pathable Waypoint (index or label)."""
+    return AddNode("DemoDerbyGetTransform", value)
 
 
 @cache
-def DemoDerbyGetCar(mode: int, index_float: Node | None = None):
-    """Demo Derby: outputs a car reference by dropdown `mode` (`0`..`26`).
+def DemoDerbyGetCar(mode: int | str, index_float: Node | None = None):
+    """Demo Derby: outputs a car reference by dropdown `mode` (`0`..`26` or label).
 
     Pass `index_float` when `mode` is `0` (by index, wrapped to vehicle count)
     or `1` (by rank, wrapped to ranked-vehicle count; ranking = DamageDealt desc,
@@ -1262,16 +1213,16 @@ def DemoDerbyGetCar(mode: int, index_float: Node | None = None):
         25 Lowest ranked (not immobilized)
         26 Lowest ranked (immobilized)
     """
-    baseNode = AddNode("DemoDerbyGetCar", str(mode))
+    baseNode = AddNode("DemoDerbyGetCar", mode)
     if index_float is not None:
         connectInputNodes(baseNode, ["Float"], [index_float])
     return baseNode
 
 
 @cache
-def CarGetPart(mode: int, car: Node) -> GetCarPartComponents:
-    """Part world transform and health percent for a car; `mode` is dropdown index (see README)."""
-    baseNode = AddNode("GetCarPart", str(mode))
+def CarGetPart(mode: int | str, car: Node) -> GetCarPartComponents:
+    """Part world transform and health percent for a car; `mode` is dropdown index or label."""
+    baseNode = AddNode("GetCarPart", mode)
     connectInputNodes(baseNode, ["Car"], [car])
     return GetCarPartComponents(baseNode)
 
@@ -1312,21 +1263,21 @@ def GetCarFromTransform(transform: Node):
 
 
 @cache
-def ParkingGetTransform(value: int):
-    """Selection of Transform options for the parking simulation."""
-    return AddNode("ParkingGetTransform", str(value))
+def ParkingGetTransform(value: int | str):
+    """Selection of Transform options for the parking simulation. Pass index or label."""
+    return AddNode("ParkingGetTransform", value)
 
 
 @cache
-def ParkingGetFloat(value: int):
-    """Selection of Float options for the parking simulation."""
-    return AddNode("ParkingGetFloat", str(value))
+def ParkingGetFloat(value: int | str):
+    """Selection of Float options for the parking simulation. Pass index or label."""
+    return AddNode("ParkingGetFloat", value)
 
 
 @cache
-def ParkingGetBool(value: int):
-    """Selection of Bool options for the parking simulation."""
-    return AddNode("ParkingGetBool", str(value))
+def ParkingGetBool(value: int | str):
+    """Selection of Bool options for the parking simulation. Pass index or label."""
+    return AddNode("ParkingGetBool", value)
 
 
 # ---------------------------------------------------------------------------
