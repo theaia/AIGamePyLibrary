@@ -2091,6 +2091,317 @@ Pass a dropdown **index** (`0`, `1`, …) or the exact Unity **label** string be
 ---
 
 <details>
+<summary><strong>Tennis Simulation</strong></summary>
+
+<div style="margin-left: 1em;">
+
+<details>
+<summary><strong>Overview</strong></summary>
+
+1v1 singles tennis. Control movement, swing/charge, shot type, and optional sprint. Helpers: `TennisAutoSwitch` (alias `TennisAutoMove`), `TennisAutoAim`, `TennisAutoSwing`.
+
+**Save folder:** `Tennis/`
+
+**Unity node list:** `Assets/_Nodes/Lists/Tennis.asset`
+
+</details>
+
+<details>
+<summary><strong>Requirements</strong></summary>
+
+- Drive with `TennisController(move_or_aim, swing, shot_type, sprint=None)`
+- Cosmetics: `ConstructTennisProperties(...)` / `InitializeTennis(...)` — kit colours come from `country` (home/away clash resolved in Unity)
+- World state: `TennisGetBool` / `TennisGetFloat` / `TennisGetVector3` / `TennisGetTransform`
+- Player positions: `RelativePosition(TennisGetTransform("Self"), "Self")` (same for Opponent / Ball)
+- Optional helpers: `TennisAutoSwitch(position, aim)` (alias `TennisAutoMove`; not a chase), `TennisAutoAim(direction=None)`, `TennisAutoSwing(shot_type, mode)` → `.swing` / `.shot_type`
+- A raw `TennisController` Vector31 on the **own half** is a move destination; on the **opponent half** it is aim-only (no walk). Use Auto Switch to steer feet and landing independently (see `Examples/TennisExample.py`).
+
+</details>
+
+<details>
+<summary><strong>Nodes</strong></summary>
+
+<table>
+  <thead>
+    <tr>
+      <th align="left">Node</th>
+      <th align="left">Purpose</th>
+      <th align="left">Inputs</th>
+      <th align="left">Outputs</th>
+      <th align="left">Options / Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><code>TennisController(move_or_aim, swing, shot_type, sprint=None)</code></td>
+      <td valign="top">Writes brain inputs for the bound tennis player</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-vector3"><code>Vector31</code></a> — <sub>Own-half move dest, or opponent-half aim if Auto Switch is not used</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-bool"><code>Bool1</code></a> — <sub>Swing / charge hold</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>Shot type (0 topspin, 1 slice, 2 flat, 3 trick)</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-bool"><code>Bool2</code></a> — <sub>Sprint (optional)</sub></li>
+        </ul>
+      </td>
+      <td valign="top">—</td>
+      <td valign="top">Destination. Wire Keypress (or Auto*) into all used ports — Unity does not inject keyboard outside the graph. Trick resolves to Drop while back-pedalling away from the net, otherwise Lob (standing still included).</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>ConstructTennisProperties(name, country, skin, hair_style, hair_color, facial_hair)</code></td>
+      <td valign="top">Player cosmetics</td>
+      <td valign="top">String, Country, Color (skin), Float (hair style), Color (hair), Float (facial hair)</td>
+      <td valign="top">—</td>
+      <td valign="top">Destination. Or use <code>InitializeTennis(...)</code></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>TennisAutoSwing(shot_type, mode=0)</code></td>
+      <td valign="top">Auto serve toss / rally swing hold</td>
+      <td valign="top"><ul><li style="margin: 0 0 8px 0;"><a href="#datatype-float"><code>Float1</code></a> — <sub>Desired shot type</sub></li></ul></td>
+      <td valign="top"><code>.swing</code> (Bool1), <code>.shot_type</code> (Float1, after <code>% 4</code>)</td>
+      <td valign="top">Modes (label): <code>Normal Only</code> (tap when <code>"Ball In Swing Range"</code>), <code>Prefer Charge</code> (hold once <code>"Is Ball Playable"</code>), <code>Random</code> (picks per rally). Never holds while the ball is still on the opponent half, or while <code>"Must Wait For Bounce"</code>.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>TennisAutoSwitch(position, aim)</code></td>
+      <td valign="top">Own-half move clamp + separate shot aim (Unity id <code>TennisAutoMove</code>)</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-vector3"><code>Vector31</code></a> — <sub>Move position (always passed through, clamped)</sub></li>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-vector3"><code>Vector32</code></a> — <sub>Aim landing (shot only; charging never steals feet)</sub></li>
+        </ul>
+      </td>
+      <td valign="top"><code>Vector31</code></td>
+      <td valign="top">Does not chase. Alias: <code>TennisAutoMove</code>. Serve aims outside the diagonal box are rewritten to <code>"Legal Serve Target"</code>. Unconnected aim (Unity) defaults to a deep clear-net landing.</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>TennisAutoAim(direction=None)</code></td>
+      <td valign="top">Legal opponent-court landing from a direction</td>
+      <td valign="top">
+        <ul>
+          <li style="margin: 0 0 8px 0;"><a href="#datatype-vector3"><code>Vector31</code></a> — <sub>Direction or world point (optional)</sub></li>
+        </ul>
+      </td>
+      <td valign="top"><code>Vector31</code></td>
+      <td valign="top">Unconnected uses current move steer, else attack direction. Same steer as the swing path, then clamped to opponent court (or the service box while serving).</td>
+    </tr>
+    <tr>
+      <td valign="top"><code>TennisGetBool(value)</code></td>
+      <td valign="top">Bool world state</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Bool1</code></td>
+      <td valign="top">Index or label — see <a href="#tennisgetbool-values">all values</a></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>TennisGetFloat(value)</code></td>
+      <td valign="top">Float world state / shot constants</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Float1</code></td>
+      <td valign="top">Index or label — see <a href="#tennisgetfloat-values">all values</a></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>TennisGetVector3(value)</code></td>
+      <td valign="top">Court / aim / trick Vector3s</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Vector31</code></td>
+      <td valign="top">Index or label — see <a href="#tennisgetvector3-values">all values</a></td>
+    </tr>
+    <tr>
+      <td valign="top"><code>TennisGetTransform(value)</code></td>
+      <td valign="top">Self / Opponent / Self Racket Center / Ball / Camera transforms</td>
+      <td valign="top">—</td>
+      <td valign="top"><code>Transform1</code></td>
+      <td valign="top">Index or label — see <a href="#tennisgettransform-values">all values</a>. Convert to position with <code>RelativePosition(tf, "Self")</code></td>
+    </tr>
+  </tbody>
+</table>
+
+</details>
+
+<details>
+<summary><strong>Details</strong></summary>
+
+### Scoring
+
+Arcade tennis, not a full ATP set. Display is **0 / 15 / 30 / 40 / Ad**. A game is won at **4 points and by 2**. First player to **2 games** wins the match (`MatchesToWin = 2`).
+
+- `"Self Points"` / `"Opponent Points"` are **raw point counts** (0, 1, 2, 3…), not 15/30/40.
+- `"Self Set Score"` / `"Opponent Set Score"` are **games won**.
+- `"Is Deuce"` — both have ≥ 3 points and are tied.
+- `"Self Has Advantage"` — both have ≥ 3 and this player is ahead.
+- `"Is Game Point"` — this player winning the next point wins the game.
+- `"Is Break Point"` — game point for the receiver.
+- `"Is Match Point"` — game point that would also win the match.
+- `"Is Self Winning"` is ahead on games, or same games and ahead on points.
+
+Serve **stays with the same player for the whole game**, then flips when a game is won.
+
+### Serve
+
+There is no ad-court serve. The server always stands on their own **deuce (right) half** and must land in the **diagonal deuce service box** (receiver’s right). The centre service line is the box boundary — aiming at it is often scored out.
+
+- `"Is Self Server"` — designated server for this game. `"Is Opponent Server"` is the other player.
+- `"Is Self Serving"` — this player is in the toss/hit window (`Serving` state and they are the server).
+- `"Is Serve Phase"` — the match is in the `Serving` state (either player).
+- `"Is Second Serve"` / `"Serve Number"` — `0` first serve, `1` after a fault.
+- Receiver **must let the serve bounce once**. Volleying it awards the point to the server (`"Must Wait For Bounce"`).
+- Serve into the net, out, own side, or bouncing before the net is a **fault**. A second fault is a **double fault** (point to the receiver).
+- A toss that falls back to the server’s waist is a **let** (re-toss), not a fault.
+- Serve clock: **15 s**. Expiry **passes the serve** to the opponent (no point).
+- **Ace** — server wins the point before the receiver touches the ball.
+
+### Rally / in-out
+
+- Singles sidelines only — **doubles alleys are out**. Lines count as in (bounce marker circle may overlap the line).
+- Two bounces on the receiver’s side without a return = point to the hitter (`"double bounce"`).
+- First floor contact out after a hit = point against the hitter. A legal bounce then going out = `"not returned"` (hitter wins).
+- Rally net contact **bounces back**; only a serve into the net is a fault.
+- `"Is Ball Playable"` is true only after the ball is playable **and on our half** (and not waiting for a serve bounce). `"Ball On Self Side"` is the half test only. `"Ball In Swing Range"` is `"Is Ball Playable"` plus strike reach.
+
+### Charge, fire, and landing
+
+Hold `TennisController` Bool1 to charge; release (or AutoSwing’s contact window) swings.
+
+- Charge scales **depth only**. `BlendAimByCharge` lerps from a safe just-over-the-net landing to the requested one by charge %, but **copies the requested Z** across. Width is free; depth is earned.
+- Fire (≥ **75%** charge) applies only on **Topspin** or **Flat**. Slice / lob / drop never catch fire. `"Ball Has Charged Effect"` is the in-play fire flag.
+- Uncharged / early-release shots collapse short (often just past the net) even if a deep landing was requested.
+
+### Trick shots
+
+Option `3` (`"Shot: Trick"`) picks the **specialty flight**, not a fifth stroke. At contact it becomes:
+
+- **Drop** if the player is moving **away** from the net (back-pedalling)
+- **Lob** otherwise, including standing still
+
+Left / right spin is **not** a separate option. Add a Trick Shot modifier to a forward aim:
+
+- `"Trick Drop Modifier"` / `"Trick Lob Modifier"` — short or deep
+- `"Trick Curve Left Modifier"` / `"Trick Curve Right Modifier"` — wide of this player’s facing
+
+Those are landing offsets. A lob or drop aimed wide enough (`|Δz|` ≥ **1.1**) also gets in-flight bend (`ComputeFlightCurve`); slice always curves. Straight-ahead trick shots do not spin.
+
+### Movement
+
+- Players may leave the painted court. They cannot walk so close to the net that the strike sphere crosses it (`NetApproachGap` ≈ **3.44**).
+- While serving, the server is clamped **behind their deuce baseline**.
+- `"Predicted Bounce"` is the ball’s next landing. It is **null** (or a toss-arc garbage point) during serve toss — `IsNull`-guard it, and do not chase it until `"Is Playing"`.
+- `"Receive Stance"` sits just behind the service line on the wide half. It is often **too deep** to cover a wide fire serve; graphs that stand exactly on it get aced.
+
+### Accuracy / contact grade
+
+A swing that reaches the ball still **connects** if the ball is inside the body-centered strike volume. Quality is a Mario Tennis **Perfect / Good / Early / Late** grade (popup + match-log timing label). Graph-chosen landings are **not** exempt — off-center contact is the accuracy cost.
+
+**Rally** is graded from the ball’s **horizontal** offset vs `"Self Racket Center"` (height is ignored; the strike volume already gates reach). That transform is a *logical* sweet spot in front of the body toward the net and on the swing side — not the animated mesh (the swing pose is still in pull-back when contact fires).
+
+- Offset is `0.55` toward the opponent and `0.45` to the forehand (+) / backhand (−) side. Y follows the ball inside the strike band.
+- **Perfect** — horizontal distance ≤ **1.05** (`rallyNiceRadius`). Full power, true aim.
+- **Good** — ≤ **1.85** (`rallyGoodRadius`). Same as Perfect for power/aim (no extra cut).
+- **Early** — farther, and the ball is still **closer to the net** than the racket. Power drops (~0.82×, down to ~0.5× at the rim). Landing is **pulled** across the court (opposite the racket side), up to `Court Width * 0.55 * severity`.
+- **Late** — farther, and the ball is **jammed behind** the racket. Power drops (~0.85× → ~0.55×). Landing is **pushed** toward the racket side.
+
+Standing *on* the ball leaves the logical racket in front of it → **Late**. Stand so `"Self Racket Center"` sits **on** the ball for Perfect. Pair with `RelativePosition(TennisGetTransform("Self Racket Center"), "Self")` and chase that onto `"Ball Position"` / `"Predicted Bounce"`.
+
+**Serve** is still toss-apex timing from the ball’s vertical speed at contact (`|vy|`):
+
+- **Perfect** — `|vy|` ≤ **1.35**. Power is raised to at least **0.92**.
+- **Good** — `|vy|` ≤ **3.4**. No extra cut.
+- **Early** — still rising (`vy > 0`). Weaker + pull.
+- **Late** — falling. Weaker + push.
+
+Severity on Early/Late ramps from **0.6** at the Good ring to **1.0** at the strike edge (rally) or `|vy|` = **10** (serve).
+
+### Constants
+
+Live values from the Tennis scene / `ApplyArcadeShotTune`. Several are also `TennisGetFloat` labels.
+
+**Court**
+- Length / `"Court Depth"`: **24** (baseline to baseline)
+- Playable width / `"Court Width"`: **10.5** (singles). Doubles visual width **14** (alleys out)
+- `"Net Height"`: **0.95**
+- Service line is halfway from net to baseline (`depth * 0.25` from centre)
+
+**Movement**
+- Walk: **8.5** · Sprint: **13** (needs stamina) · Slide: **14**, range **11**
+- Strike radius **2.6**, strike height **1.25**
+- Closest legal stand to the net: ≈ **3.44** (`NetApproachGap`)
+
+**Contact**
+- Logical racket: **0.55** toward the net, **0.45** to the swing side
+- Rally Perfect radius **1.05** · Good radius **1.85** · Early/Late out to strike radius **2.6**
+- Serve Perfect `|vy|` ≤ **1.35** · Good ≤ **3.4** · Early/Late severity full at `|vy|` **10**
+- Early/Late aim drift up to **55%** of court width × severity
+
+**Stamina**
+- Max: **100** (`"Self Stamina Pct"` / `"Opponent Stamina Pct"` are 0–1)
+- Sprint consume: **1** per simulation tick (~2 s to empty at 50 Hz)
+- Regen: **5** / s after **1** s delay; **3** s extra delay after a full deplete
+
+**Charge**
+- Max charge window: **0.4** s after a **0.5** s windup
+- Fire threshold: **0.75** (Topspin / Flat only)
+- Power range (arcade): **0.85**–**1.3**
+
+**Match**
+- Points to win a game: **4**, win by 2
+- Games to win the match: **2**
+- Between-point hold: **1.15** s · Serve clock: **15** s
+
+**Shot speeds** (arcade tune)
+- Flat **28** · Topspin **24** · Slice **16** · Lob **15** · Drop **8.2**
+
+Pass a dropdown **index** (`0`, `1`, …) or the exact Unity **label** string below. Order matches Unity and `DROPDOWN_OPTIONS` in `data.py`. Tennis Get* and `TennisAutoSwing` emit **labels** (Unity matches text, so inserts/reorders on the C# side do not break old graphs).
+
+<a id="tennisgetbool-values"></a>
+
+### TennisGetBool values
+
+`"Is Playing"`, `"Is Home"`, `"Is Self Server"`, `"Is Opponent Server"`, `"Is Serve Phase"`, `"Is Self Serving"`, `"Is Second Serve"`, `"Is Ball Playable"`, `"Is Ball Lob"`, `"Is Ball Drop"`, `"Is Self Charging"`, `"Is Opponent Charging"`, `"Is Self Winning"`, `"Is Opponent Winning"`, `"Is Tied"`, `"Is Deuce"`, `"Is Game Point"`, `"Is Break Point"`, `"Is Match Point"`, `"Ball On Self Side"`, `"Ball Incoming"`, `"Ball In Swing Range"`, `"Ball Has Bounced"`, `"Must Wait For Bounce"`, `"Ball Has Charged Effect"`, `"Ball Has Topspin"`, `"Ball Has Backspin"`, `"Self Scored Last Point"`, `"Opponent Scored Last Point"`, `"Self Has Advantage"`
+
+Legacy labels (`"Is Server"`, `"Can Hit"`, `"Is Serving"`, `"Ball On My Side"`, …) still compile — Unity and PyLib remap them.
+
+<a id="tennisgetfloat-values"></a>
+
+### TennisGetFloat values
+
+`"Shot: Topspin"`, `"Shot: Slice"`, `"Shot: Flat"`, `"Shot: Trick"`, `"Shot: Random"`, `"Shot: Last Self Shot"`, `"Shot: Last Opponent Shot"`, `"Shot: Most Used Self Shot"`, `"Shot: Most Used Opponent Shot"`, `"Shot: Most Scored Self Shot"`, `"Shot: Most Scored Opponent Shot"`, `"Shot: Ball"`, `"Self Swing Charge Pct"`, `"Opponent Swing Charge Pct"`, `"Self Stamina Pct"`, `"Opponent Stamina Pct"`, `"Court Width"`, `"Court Depth"`, `"Net Height"`, `"Ball Speed"`, `"Time Ball To Ground"`, `"Time To Destination"`, `"Serve Number"`, `"Self Points"`, `"Opponent Points"`, `"Self Set Score"`, `"Opponent Set Score"`, `"Self Aces"`, `"Opponent Aces"`, `"Self Faults"`, `"Opponent Faults"`, `"Self Charged Shots"`, `"Opponent Charged Shots"`
+
+Shot-type constants are **0 / 1 / 2 / 3**. `"Shot: Random"` re-rolls only after this player’s successful hit, so it is stable for a whole stroke (unlike `RandomFloat`). Tendency / last-shot floats use the same 0–3 option space. `"Shot: Ball"` maps the in-play stroke (lob/drop included) back onto that option space.
+
+<a id="tennisgetvector3-values"></a>
+
+### TennisGetVector3 values
+
+`"Ball Position"`, `"Predicted Bounce"`, `"Center Of Half"`, `"Center Of Back"`, `"Serve Stance"`, `"Receive Stance"`, `"Legal Serve Target"`, `"Random Aim Target"`, `"Self Average Scoring Location"`, `"Opponent Average Scoring Location"`, `"Estimated Opponent Shot Location"`, `"Trick Drop Modifier"`, `"Trick Lob Modifier"`, `"Trick Curve Left Modifier"`, `"Trick Curve Right Modifier"`, `"Camera Forward"`, `"Camera Right"`
+
+Scoring locations use **match history when available**, otherwise a default aim for that player. `"Self Average Scoring Location"` lands on the **opponent** half; `"Opponent Average Scoring Location"` lands on **ours**. They are only null if the player cannot be resolved. Optional graph guard: `ConditionalSetVector3(IsNull(score), TennisGetVector3("Random Aim Target"), score)`.
+
+Trick modifiers are **offsets** you add to a forward aim: Drop pulls short, Lob pushes deep, Curve Left/Right go wide of this player’s facing.
+
+Player / opponent / ball **world positions**: `RelativePosition(TennisGetTransform("Self"|"Opponent"|"Ball"), "Self")` — `"Ball Position"` is the one GetVector3 exception.
+
+<a id="tennisgettransform-values"></a>
+
+### TennisGetTransform values
+
+`"Self"`, `"Opponent"`, `"Self Racket Center"`, `"Ball"`, `"Camera"`
+
+`"Self Racket Center"` is the logical sweet spot used for rally grading (see **Accuracy / contact grade**). `"Racket Center"` is accepted as an alias.
+
+### Tips
+
+- Shot type floats: 0 Topspin, 1 Slice, 2 Flat, 3 Trick (Drop if moving away from the net, otherwise Lob). Curve left/right is an aim modifier plus flight bend, not a 4th/5th option.
+- All Tennis dropdowns (`Get*` and `TennisAutoSwing`) emit **labels**. Index or label both work at compile time.
+- `"Is Self Server"` ≠ `"Is Self Serving"`. Use `"Is Self Serving"` for toss/hit behaviour and `"Is Self Server"` for who holds serve this game.
+- Rally accuracy is racket-on-ball, not body-on-ball. Steer `"Self Racket Center"` onto the ball; standing on the bounce is usually **Late**.
+- Example: `Examples/TennisExample.py` (Away NPC), `Examples/TennisHomeExample.py` (keyboard Home).
+
+</details>
+
+</div>
+
+</details>
+
+---
+
+<details>
 <summary><strong>RacingV2 Simulation</strong></summary>
 
 <div style="margin-left: 1em;">
@@ -2548,7 +2859,6 @@ See the full list in the Country node docs above (same list used across simulati
     - `"auto"` - Topological layout (recommended)
     - `"grid"` - Grid-based layout
     - `"single"` - All nodes at origin
-    - `"hidden"` - Nodes positioned off-screen
     - `None` - No layout changes
   - `pruneUnusedNodes`: Remove nodes that aren't connected (default: True)
   - `keepPosition`: Preserve manually set node positions (default: True)
@@ -2814,10 +3124,11 @@ Concretely:
   - Demo Derby → `DemoDerbyGetTransform(...)` / `DemoDerbyGetCar(...)` / `CarGetPart(...).PartTransform` / `CarInfo(...).CarTransform`.
   - RacingV2 → `RacingV2GetFloat(...)` / `RacingV2GetBool(...)` / `RacingV2GetCar(...)` / `RacingV2GetWaypoint(...)` / `RacingV2Waypoint(...)` plus the shared modular car stack (`ModularUniformController`, `CarRaycasts`, …). Properties: `InitializeRacingV2` / `ConstructRacingV2Properties`.
   - Soccer → `SoccerGetBool(...)` / `SoccerGetFloat(...)` / `SoccerGetTransform(...)` / `SoccerGetVector3(...)`, with per-player `SoccerController(1..4, …)` and `SoccerPlayerSensors(1..4, …)`.
+  - Tennis → `TennisGetBool(...)` / `TennisGetFloat(...)` / `TennisGetVector3(...)` / `TennisGetTransform(...)`, with `TennisController(...)`, `TennisAutoSwitch` (`TennisAutoMove`), `TennisAutoAim`, `TennisAutoSwing`.
   - The unprefixed aliases (`GetVector3` / `GetTransform` / `GetBool` / `GetFloat`) are **Volleyball only** — they exist purely for backward-compat with old scripts. Using them in any other sim's graph produces the wrong Unity node and won't deserialize correctly.
   - **Custom Functions** (`CreateFunction` / `CustomFunction`) are reusable Unity subgraphs: params in, return out via **`SetFunctionReturn(fn, body_output)`** (e.g. `Power.Float1` → Return `Any1` In). Body nodes only run when called — not the same as Python `customNodes.py` helpers. See **Default Nodes → Organization → Custom Functions**.
   - To turn any `Transform` node into a world-space `Vector3`, wrap it in `RelativePosition(transform_node, "Self")`.
-- Save folders by sim include `Soccer/`, `RacingV2/`, `DemoDerby/`, `Parking/`, etc.
+- Save folders by sim include `Soccer/`, `Tennis/`, `RacingV2/`, `DemoDerby/`, `Parking/`, etc.
 - The `Initialize*` helpers take **positional arguments**, not keyword arguments. There is no `name=`, `country=`, `modifier_llm=`, `save_file=` etc. See each simulation's section for the exact signature.
 - There is no `sim` object. Methods like `sim.is_active()`, `sim.get_self_data()`, `sim.get_opponents()`, `sim.set_controls()`, `sim.update()` **do not exist** — if you wrote any of those, you are hallucinating an SDK that isn't here.
 - The **`AIGamePyLibrary`** import exposes helpers as **free functions**, not methods on a module object you treat like a `sim` runtime. (**Aialander PyLib** is the same project under that friendly name.)

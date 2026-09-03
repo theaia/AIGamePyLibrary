@@ -17,6 +17,7 @@ from .data import (
     SERIALIZE_COLOR_NODES,
     DROPDOWN_OPTIONS,
     DROPDOWN_MODIFIER_AS_LABEL,
+    DROPDOWN_ALIASES,
 )
 from .utils import Position2, Position3, generateId
 
@@ -529,6 +530,9 @@ def _normalize_modifier(node_name: str, node_value):
         idx = node_value % n
     elif isinstance(node_value, str):
         value_str = node_value.strip()
+        alias = DROPDOWN_ALIASES.get(node_name, {}).get(value_str.casefold())
+        if alias:
+            value_str = alias
         lowered = value_str.casefold()
         for i, opt in enumerate(options):
             if opt.casefold() == lowered:
@@ -844,7 +848,7 @@ def removeUnusedNodes():
 
 def SaveData(
     filePath,
-    layout: Literal["auto", "grid", "single", "hidden", None] = "auto",
+    layout: Literal["auto", "grid", "single", None] = "auto",
     pruneUnusedNodes=True,
     keepPosition=True,
 ):
@@ -862,13 +866,6 @@ def SaveData(
                 if not _is_at_origin(transform) and keepPosition:
                     continue
                 _set_layout_position(transform, 0, 0)
-        case "hidden":
-            for node in data["serializableNodes"]:
-                transform = node["serializableRectTransform"]
-                if not _is_at_origin(transform) and keepPosition:
-                    continue
-                _set_layout_position(transform, 9999, 9999)
-                transform["scale"] = Position3(0, 0)
 
     updateConnectionLinePoints()
     _prepare_for_unity_format()

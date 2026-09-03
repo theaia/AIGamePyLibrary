@@ -32,3 +32,18 @@ def GetSurvivalSavePath(
         filename = filename + ".txt"
     base = os.environ.get("USERPROFILE", os.path.expanduser("~"))
     return os.path.join(base, "AppData", "LocalLow", company, product, "Saves", "Survival", filename)
+
+
+def GetTennisSavePath(
+    filename: str,
+    company: str = "Unicorn One",
+    product: str = "AIComp",
+) -> str:
+    """
+    Returns the full path for a Tennis save file, matching Unity's persistentDataPath.
+    Example: GetTennisSavePath("Away.txt") -> .../AppData/LocalLow/Unicorn One/AIComp/Saves/Tennis/Away.txt
+    """
+    if not filename.endswith(".txt"):
+        filename = filename + ".txt"
+    base = os.environ.get("USERPROFILE", os.path.expanduser("~"))
+    return os.path.join(base, "AppData", "LocalLow", company, product, "Saves", "Tennis", filename)

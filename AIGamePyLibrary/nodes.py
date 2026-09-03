@@ -3,7 +3,7 @@ from typing import Literal
 
 from .data import colorNames, countryNames
 from .lib import AddNode, ConnectPorts, Node, SaveData, data
-from .utils import Color, GetSurvivalSavePath, Position3
+from .utils import Color, GetSurvivalSavePath, GetTennisSavePath, Position3
 
 
 def parseLiteral(value):
@@ -1489,6 +1489,179 @@ def SoccerGetVector3(value: int | str):
 
 
 # ---------------------------------------------------------------------------
+# Tennis simulation
+# ---------------------------------------------------------------------------
+
+def InitializeTennis(
+    name: str,
+    country: countryNames,
+    skin: colorNames,
+    hair_style: int | float,
+    hair_color: colorNames,
+    facial_hair: int | float,
+):
+    """Initialize tennis player cosmetics. Sets up an Aialander for Tennis."""
+    ConstructTennisProperties(
+        String(name),
+        Country(country),
+        Color(skin),
+        Float(hair_style),
+        Color(hair_color),
+        Float(facial_hair),
+    )
+
+
+@cache
+def ConstructTennisProperties(
+    name: str | Node,
+    country: countryNames | Node,
+    skin: colorNames | Node,
+    hair_style: int | float | Node,
+    hair_color: colorNames | Node,
+    facial_hair: int | float | Node,
+):
+    """Sets tennis player cosmetics: name, country, skin, hair style, hair color, facial hair."""
+    baseNode = AddNode("ConstructTennisProperties")
+    connectInputNodes(
+        baseNode,
+        ["String", "Country", "Color", "Float", "Color", "Float"],
+        [name, country, skin, hair_style, hair_color, facial_hair],
+    )
+    return baseNode
+
+
+@cache
+def TennisController(
+    move_or_aim: Node | None,
+    swing: Node | None,
+    shot_type: Node | None,
+    sprint: Node | None = None,
+):
+    """Controls a tennis player's brain.
+
+    Ports: Vector31 move-to / on-hit aim, Bool1 swing/charge, Float1 shot type,
+    Bool2 sprint (optional). Trick lob vs drop uses move direction toward/away from net.
+    Wire Keypress (or AutoMove/AutoSwing) into ports — keyboard is not injected outside the graph.
+    """
+    baseNode = AddNode("TennisController")
+    connectInputNodes(
+        baseNode,
+        ["Vector3", "Bool", "Float", "Bool"],
+        [move_or_aim, swing, shot_type, sprint],
+    )
+    return baseNode
+
+
+@cache
+def TennisGetBool(value: int | str):
+    """Tennis bool accessor. Pass dropdown index or label (see README / DROPDOWN_OPTIONS).
+
+    `"Is Self Server"` is who holds serve this game; `"Is Self Serving"` is the
+    toss/hit window. `"Is Ball Playable"` is true only after the ball has crossed
+    onto our half. Legacy labels (`"Is Server"`, `"Can Hit"`, …) are aliased.
+    """
+    return AddNode("TennisGetBool", value)
+
+
+@cache
+def TennisGetFloat(value: int | str):
+    """Tennis float accessor. Pass dropdown index or label (see README / DROPDOWN_OPTIONS).
+
+    Shot-option constants are 0–3 (`"Shot: Topspin"` … `"Shot: Trick"`).
+    `"Shot: Random"` re-rolls only after this player's successful hit.
+    `"Self Points"` is a raw point count; `"Self Set Score"` is games won.
+    """
+    return AddNode("TennisGetFloat", value)
+
+
+@cache
+def TennisGetVector3(value: int | str):
+    """Tennis Vector3 accessor. Pass dropdown index or label (see README / DROPDOWN_OPTIONS).
+    Player/ball world positions: use TennisGetTransform + RelativePosition(..., \"Self\")."""
+    return AddNode("TennisGetVector3", value)
+
+
+@cache
+def TennisGetTransform(value: int | str):
+    """Tennis Transform accessor (Self / Opponent / Self Racket Center / Ball / Camera).
+
+    `"Self Racket Center"` is the logical sweet spot graphs should steer onto —
+    rally contact is graded by horizontal offset from it. Convert to Vector3 via
+    RelativePosition(tf, \"Self\"). `"Racket Center"` is accepted as an alias.
+    """
+    return AddNode("TennisGetTransform", value)
+
+
+class TennisAutoSwingComponents:
+    """Multi-output helper for `TennisAutoSwing` (Bool1 swing, Float1 shot_type)."""
+
+    def __init__(self, baseNode: Node):
+        self._baseNode = baseNode
+
+    @property
+    def swing(self) -> Node:
+        """Bool1 — swing / charge hold."""
+        return Node(self._baseNode.data, 1)
+
+    @property
+    def shot_type(self) -> Node:
+        """Float1 — resolved shot type option."""
+        return Node(self._baseNode.data, 2)
+
+    def __iter__(self):
+        yield self.swing
+        yield self.shot_type
+
+    def __len__(self):
+        return 2
+
+    def __getitem__(self, index):
+        return [self.swing, self.shot_type][index]
+
+
+@cache
+def TennisAutoSwing(shot_type: Node, mode: int | str = 0) -> TennisAutoSwingComponents:
+    """Auto serve toss / rally swing hold. `mode`: Normal Only | Prefer Charge | Random.
+
+    "Normal Only" taps when the ball is nearby on our half. "Prefer Charge"
+    holds once `"Is Ball Playable"` is true and releases at the contact window. Neither
+    holds while the ball is still on the opponent half. Returns `.swing`
+    (Bool1) and `.shot_type` (Float1)."""
+    baseNode = AddNode("TennisAutoSwing", mode)
+    connectInputNodes(baseNode, ["Float"], [shot_type])
+    return TennisAutoSwingComponents(baseNode)
+
+
+@cache
+def TennisAutoSwitch(position: Node, aim: Node):
+    """Clamps `position` to a legal own-half spot and hands `aim` to the player
+    as the shot target without stealing locomotion.
+
+    A raw `TennisController` Vector31 is read as *either* a move destination
+    (own half) *or* an aim landing (opponent half), never both — this node is
+    how you steer feet and target independently. Does not chase intercepts.
+    Serializes as TennisAutoMove (Unity node id). `TennisAutoMove` is an alias.
+    """
+    baseNode = AddNode("TennisAutoMove")
+    connectInputNodes(baseNode, ["Vector3", "Vector3"], [position, aim])
+    return baseNode
+
+
+TennisAutoMove = TennisAutoSwitch
+
+
+@cache
+def TennisAutoAim(direction: Node | None = None):
+    """Legal opponent-court landing steered by a direction or world point.
+
+    Unconnected direction uses current move steer, else attack direction.
+    """
+    baseNode = AddNode("TennisAutoAim")
+    connectInputNodes(baseNode, ["Vector3"], [direction])
+    return baseNode
+
+
+# ---------------------------------------------------------------------------
 # RacingV2 simulation
 # ---------------------------------------------------------------------------
 
@@ -1632,6 +1805,15 @@ def connectInputNodes(baseNode, inputTypes, inputs):
     counters = {}
 
     for inputType, inputData in zip(inputTypes, inputs):
+        if inputType not in counters:
+            counters[inputType] = 1
+        num2 = counters[inputType]
+        counters[inputType] += 1
+
+        # Skip optional unconnected ports while preserving destination port numbering.
+        if inputData is None:
+            continue
+
         num1 = 1
 
         if isinstance(inputData, Node):
@@ -1644,11 +1826,6 @@ def connectInputNodes(baseNode, inputTypes, inputs):
             inputNode = inputData
 
         inputNode = parseLiteral(inputNode)
-
-        if inputType not in counters:
-            counters[inputType] = 1
-        num2 = counters[inputType]
-        counters[inputType] += 1
 
         if inputType == "Any":
             # Get actual output port from input node (Float1, Vector31, Bool1, etc.)
@@ -1675,5 +1852,4 @@ def connectInputNodes(baseNode, inputTypes, inputs):
                 if 0 <= num1 - 1 < len(outputPorts):
                     portName1 = outputPorts[num1 - 1]
 
-        if inputData is not None:
-            ConnectPorts((portName1, portName2), inputNode, baseNode)
+        ConnectPorts((portName1, portName2), inputNode, baseNode)
