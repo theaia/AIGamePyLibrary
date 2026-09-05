@@ -794,9 +794,35 @@ def RandomFloat(node0: Node, node1: Node):
     return baseNode
 
 
-def Region():
-    """Groups nodes visually for organization. Does not affect logic."""
-    return AddNode("Region", includePorts=True)
+class Region:
+    """Visual-only labeled frame. Does not change graph logic.
+
+    Prefer this over a giant unlabeled graph. Use as a context manager so the
+    frame is sized around the nodes created in the block:
+
+        with Region("Jump when the ball is close"):
+            jump = Distance(ball_pos, self_pos) < 2.25
+
+    `# region Title` / `# --- Title ---` comments in the bot script are also
+    turned into Region frames at `SaveData` time.
+    """
+
+    def __init__(self, label: str = "", color=None):
+        self.label = label
+        self.color = color
+        self.node = None
+
+    def __enter__(self):
+        from .lib import begin_region
+
+        self.node = begin_region(self.label, self.color)
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        from .lib import end_region
+
+        end_region()
+        return False
 
 
 @cache
@@ -1556,9 +1582,10 @@ def TennisController(
 def TennisGetBool(value: int | str):
     """Tennis bool accessor. Pass dropdown index or label (see README / DROPDOWN_OPTIONS).
 
-    `"Is Self Server"` is who holds serve this game; `"Is Self Serving"` is the
-    toss/hit window. `"Is Ball Playable"` is true only after the ball has crossed
-    onto our half. Legacy labels (`"Is Server"`, `"Can Hit"`, …) are aliased.
+    `"Is Self Server For Set"` is who holds serve this game; `"Is Self Actively
+    Serving"` is the toss/hit window. `"Is Ball Playable"` is true only after
+    the ball has crossed onto our half. Last-shot flags are `"Was Last Shot …"`.
+    Legacy labels (`"Is Server"`, `"Is Self Serving"`, `"Can Hit"`, …) are aliased.
     """
     return AddNode("TennisGetBool", value)
 
@@ -1567,9 +1594,11 @@ def TennisGetBool(value: int | str):
 def TennisGetFloat(value: int | str):
     """Tennis float accessor. Pass dropdown index or label (see README / DROPDOWN_OPTIONS).
 
-    Shot-option constants are 0–3 (`"Shot: Topspin"` … `"Shot: Trick"`).
-    `"Shot: Random"` re-rolls only after this player's successful hit.
-    `"Self Points"` is a raw point count; `"Self Set Score"` is games won.
+    Shot-option constants are 0–7 (`"Shot: Topspin"` … `"Shot: Curve Right"`).
+    `"Shot: Trick"` is a legacy alias of Lob. `"Shot: Random"` re-rolls only
+    after this player's successful hit. `"Deuce Fatigue"` / `"Rally Fatigue"`
+    ramp on long deuces / rallies. `"Self Points"` is a raw point count;
+    `"Self Set Score"` is games won.
     """
     return AddNode("TennisGetFloat", value)
 

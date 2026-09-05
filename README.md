@@ -21,29 +21,23 @@ Here's a simple example for **Volleyball**. Everything you read here — positio
 ```python
 from AIGamePyLibrary import *
 
-# Initialize the slime with name, color, country, and stats (speed, acceleration, jump)
 InitializeSlime("AIA", "Yellow", "United States of America", 5, 3, 2)
 
-# Grab the world Vector3s from the graph. Every call returns a Node.
-ball_position = VolleyballGetVector3("Ball Position")
-self_position = VolleyballGetVector3("Self Position")
+with Region("Read world state"):
+    ball_position = VolleyballGetVector3("Ball Position")
+    self_position = VolleyballGetVector3("Self Position")
+    team_spawn    = VolleyballGetTransform("Self Team Spawn")
 
-# Team spawn is a Transform; convert to a Vector3 via RelativePosition.
-team_spawn    = VolleyballGetTransform("Self Team Spawn")
-positionSign  = RelativePosition(team_spawn, "Backward")
+with Region("Move under the ball"):
+    positionSign = RelativePosition(team_spawn, "Backward")
+    moveTo = ball_position + positionSign * 0.4
 
-# Calculate where to move (ball position + offset)
-moveTo = ball_position + positionSign * 0.4
+with Region("Jump when the ball is close"):
+    distanceToBall = Distance(ball_position, self_position)
+    jumpCondition  = distanceToBall < 2.25
 
-# Calculate distance to ball and jump condition
-distanceToBall = Distance(ball_position, self_position)
-jumpCondition  = distanceToBall < 2.25
-
-# Control the slime (target position, jump condition)
 SlimeController(moveTo, jumpCondition)
-
-# Save the AI data to a file
-SaveData("SlimeVolleyball/AIComp_Data/Saves/AIA python.txt", "grid")
+SaveData("SlimeVolleyball/AIComp_Data/Saves/AIA python.txt")
 ```
 
 ## Core Concepts
@@ -751,8 +745,8 @@ Node configurations determine which nodes are available in the Unity editor. Eac
   </thead>
   <tbody>
     <tr>
-      <td valign="top"><code>SetVariable(value)</code></td>
-      <td valign="top">Saves the input value so it can be used by matching <code>GetVariable</code> nodes</td>
+      <td valign="top"><code>SetVariable(name, value)</code></td>
+      <td valign="top">Names a value in the Unity graph so matching <code>GetVariable(name)</code> nodes can reuse it without a long wire</td>
       <td valign="top">
         <ul>
           <li style="margin: 0 0 8px 0;"><a href="#datatype-any"><code>Any1</code></a> — <sub>An input of any data type</sub></li>
@@ -923,8 +917,8 @@ Note: `World` exists in the Unity dropdown; currently it behaves the same as `Se
   </thead>
   <tbody>
     <tr>
-      <td valign="top"><code>Region</code></td>
-      <td valign="top">Groups nodes visually for organization (does not affect logic)</td>
+      <td valign="top"><code>with Region("label"):</code></td>
+      <td valign="top">Visual frame that highlights and labels a section (does not affect logic). <code># region Title</code> comments become frames at save time too.</td>
       <td valign="top">—</td>
       <td valign="top">—</td>
     </tr>
@@ -2860,8 +2854,9 @@ See the full list in the Country node docs above (same list used across simulati
   - Saves the AI data to a JSON file that can be imported into Unity
   - `filePath`: Path to save the file
   - `layout`: Layout mode
-    - `"auto"` - Topological layout (recommended)
-    - `"grid"` - Grid-based layout
+    - `"auto"` - Size-aware hierarchical visualizer (default, recommended)
+    - `"terminator"` - Compact neighbor-tightened layout
+    - `"grid"` - Square grid
     - `"single"` - All nodes at origin
     - `None` - No layout changes
   - `pruneUnusedNodes`: Remove nodes that aren't connected (default: True)
@@ -2906,9 +2901,11 @@ SaveData("my_bot.txt", "auto")
 
 1. **Use Python operators**: Instead of calling `AddFloats(a, b)`, use `a + b` for cleaner code
 2. **Node caching**: Functions automatically cache nodes with the same inputs for efficiency
-3. **Layout options**: Use `"auto"` for clean topological layouts, `"grid"` for grid-based layouts
-4. **Debugging**: Use `Debug(value)` to inspect node values during development
-5. **Vector components**: Access vector components via `.x`, `.y`, `.z` properties on Vector3 nodes
+3. **Layout options**: `"auto"` (default hierarchical visualizer), `"terminator"` (compact), `"grid"`, or `"single"`
+4. **Label sections**: Wrap each job in `with Region("what this does"):`. `# region Title` comments are turned into Region frames automatically.
+5. **Name and reuse**: `SetVariable("goal", goal)` / `GetVariable("goal")` for values you read in more than one place; `CreateFunction` for a subgraph you instantiate more than once.
+6. **Debugging**: Use `Debug(value)` to inspect node values during development
+7. **Vector components**: Access vector components via `.x`, `.y`, `.z` properties on Vector3 nodes
 
 ## File Output
 
@@ -3139,6 +3136,27 @@ Concretely:
 - The LLM-driven flag is set on the **returned** Properties node: `props.data["modifier"] = "True"`. There is **no** `modifier_llm=`, `is_llm=`, `llm=`, or `isLLM=` keyword argument on any helper.
 - Your script must end with a call to **`SaveData("YourBot", "auto")`** or nothing is exported.
 
+## Organize the graph (do this on every bot)
+
+A finished bot should read like labeled sections, not one unlabeled spaghetti pile. Do all three:
+
+1. **Regions — highlight what a chunk is for.** Wrap each job in `with Region("short label"):`. The label is what Unity shows on the frame (`//Move under the ball`). This is visual-only; it does not change execution.
+   - If you only write section comments, `SaveData` still builds frames from `# region Title` / `# endregion` or `# --- Title ---`.
+   - Prefer the `with Region(...)` form so membership is exact.
+2. **Variables — name values that get reused.** `SetVariable("ball_position", ball_position)` stores a labeled slot; `GetVariable("ball_position")` reads it elsewhere without dragging a wire across the graph. Use a clear name that says what the value *is*. Python names (`goal = ...`) are still the compile-time handle — Unity variables are for the graph.
+3. **Custom Functions — extract repeated subgraphs.** If the same 3+ node recipe appears more than once (per-player soccer math, shared aim helper, `Power`/`Lerp` wrapper), define it once with `CreateFunction` + `AssignToFunction` + **`SetFunctionReturn`**, then call `CustomFunction("Name", ...)`. Do not copy-paste the same chain. Region ≠ function: Region is a label; a Custom Function changes *when* those nodes run.
+
+```python
+with Region("Read world state"):
+    ball_position = VolleyballGetVector3("Ball Position")
+    self_position = VolleyballGetVector3("Self Position")
+    SetVariable("ball_position", ball_position)
+    SetVariable("self_position", self_position)
+
+with Region("Jump when the ball is close"):
+    jump = Distance(GetVariable("ball_position"), GetVariable("self_position")) < 2.25
+```
+
 ## 🚨 CRITICAL: Multi-output Bug (KeyError: 'Bool4', 'Vector32', etc.)
 
 **The most common error LLMs make** when writing Demo Derby or RacingV2 bots is using `CarInfo(...).IsImmobile`, `.Velocity`, `.Health`, `.Rank`, or `CarGetPart(...).HealthPercent` in `ConditionalSetFloat`, comparisons, arithmetic, etc.
@@ -3177,6 +3195,7 @@ These are the exact mistakes we keep seeing. If your draft does any of them, rew
 | `transform.Position` / `transform.position` on a Transform node | `RelativePosition(transform_node, "Self")` returns the world `Vector3` |
 | `Self.Position` / `Ball.Position` / `entity.Velocity` / `Self.TeamSpawn` / `Game.DeltaTime` — dotted accessors on a game entity | **Use the simulation-prefixed node helpers everywhere.** Volleyball: `VolleyballGetVector3("Self Position")`, `VolleyballGetVector3("Ball Velocity")`, `VolleyballGetTransform("Self Team Spawn")`, `VolleyballGetBool("Self Can Jump")`, `VolleyballGetFloat("Delta time")`. Other sims have their own helpers (`DemoDerbyGetTransform`, `DemoDerbyGetCar`, `CarGetPart(...).PartTransform`, `SurvivalGetTransform`, `ParkingGetTransform`, etc.). Never assume `.Position` / `.Velocity` / `.Transform` exists on a Node — it does not, and examples that used to show that shortcut have been rewritten. |
 | `GetTransform(...)` / `GetBool(...)` / `GetFloat(...)` / `GetVector3(...)` used in Survival / Parking / Demo Derby / Soccer / RacingV2 graphs | Those unprefixed names are **Volleyball-only** backward-compat aliases. In other sims you'll silently build the wrong Unity node. Use the sim prefix: `SurvivalGetTransform` / `ParkingGetTransform` / `DemoDerbyGetTransform` / `SoccerGetTransform` / `RacingV2GetFloat`, etc. |
+| One unlabeled pile of nodes, or repeating the same subgraph four times | Wrap each job in `with Region("what this does"):`. Name reused values with `SetVariable` / `GetVariable`. Extract repeated recipes with `CreateFunction` + `SetFunctionReturn` + `CustomFunction`. |
 | Treating `CreateFunction` like `Region`, or like Python `customNodes.py` | Custom Functions change execution: body nodes only run via `CustomFunction(...)` calls; params/optional return are the interface. `Region` is visual-only. |
 | Building `Power` / math inside `CreateFunction` but forgetting the return wire | Always call `SetFunctionReturn(fn, powered)` so `Power.Float1` connects to CreateFunction Return (`Any1` In). Without it, `CustomFunction(...)` output is null. |
 | Wiring Return to port id `Any` | Return is **`Any1` polarity In** (not `Any`). Param1 Out is also `Any1` — polarity distinguishes them. |

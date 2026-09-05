@@ -1,7 +1,10 @@
+import inspect
 import json
 import math
 import numbers
+import os
 import random
+import re
 from collections import deque
 from typing import Literal
 
@@ -22,6 +25,26 @@ from .data import (
 from .utils import Position2, Position3, generateId
 
 data = {"serializableNodes": [], "serializableConnections": []}
+
+# Visual Region frames: members are node sIDs created inside `with Region("…")`
+# or inferred from `# region` comments in the user script.
+_region_stack = []
+_region_records = []
+_node_source_lines = {}
+_REGION_PAD_X = 28
+_REGION_PAD_BOTTOM = 28
+_REGION_HEADER = 40
+_REGION_COLORS = (
+    {"r": 0.35, "g": 0.62, "b": 0.95, "a": 1},
+    {"r": 0.40, "g": 0.78, "b": 0.55, "a": 1},
+    {"r": 0.95, "g": 0.72, "b": 0.28, "a": 1},
+    {"r": 0.93, "g": 0.40, "b": 0.55, "a": 1},
+    {"r": 0.55, "g": 0.45, "b": 0.90, "a": 1},
+    {"r": 0.30, "g": 0.80, "b": 0.85, "a": 1},
+)
+_COMMENT_REGION_END = re.compile(r"^\s*#\s*end\s*-?\s*region\b", re.I)
+_COMMENT_REGION_START = re.compile(r"^\s*#\s*region(?:\s*:|\s+)\s*(.+?)\s*$", re.I)
+_COMMENT_REGION_BANNER = re.compile(r"^\s*#\s*-{3,}\s+(.+?)\s+-{3,}\s*$")
 
 
 def isNumber(value):
@@ -585,6 +608,8 @@ def AddNode(nodeName, nodeValue="", includePorts=True, position=None, ownerFunct
             )
 
     data["serializableNodes"].append(node)
+    _record_node_source(nodeId)
+    _attach_to_open_regions(nodeId)
 
     return Node(node)
 
@@ -627,83 +652,548 @@ def findNodeByPortSID(portSID):
     return None
 
 
+def _user_caller():
+    """First stack frame outside this package (the bot script)."""
+    pkg = os.path.dirname(os.path.abspath(__file__))
+    frame = inspect.currentframe()
+    while frame:
+        path = os.path.abspath(frame.f_code.co_filename)
+        if not path.startswith(pkg) and path.endswith(".py"):
+            return path, frame.f_lineno
+        frame = frame.f_back
+    return None, None
+
+
+def _record_node_source(node_sid):
+    path, lineno = _user_caller()
+    if path and lineno:
+        _node_source_lines[node_sid] = (path, lineno)
+
+
+def _attach_to_open_regions(node_sid):
+    for rec in _region_stack:
+        rec["members"].add(node_sid)
+
+
+def _region_label(label):
+    text = str(label or "").strip()
+    if text.startswith("//"):
+        text = text[2:].strip()
+    if not text:
+        text = "Region"
+    return "//" + text
+
+
+def _region_color(color, index=0):
+    if isinstance(color, dict) and "r" in color:
+        return {
+            "r": float(color.get("r", 0.35)),
+            "g": float(color.get("g", 0.62)),
+            "b": float(color.get("b", 0.95)),
+            "a": float(color.get("a", 1)),
+        }
+    return _REGION_COLORS[index % len(_REGION_COLORS)]
+
+
+def begin_region(label="", color=None):
+    """Start a labeled visual Region; nodes created until end_region() are members."""
+    node = AddNode("Region", _region_label(label), includePorts=True)
+    rec = {"sid": node.data["sID"], "members": set()}
+    node.data["serializableDefaultColor"] = _region_color(color, len(_region_records))
+    _region_records.append(rec)
+    _region_stack.append(rec)
+    return node
+
+
+def end_region():
+    if _region_stack:
+        _region_stack.pop()
+
+
+def _parse_comment_regions(source_path):
+    try:
+        with open(source_path, encoding="utf-8") as f:
+            lines = f.readlines()
+    except OSError:
+        return []
+    blocks = []
+    current = None
+    for i, line in enumerate(lines, start=1):
+        if _COMMENT_REGION_END.match(line):
+            if current:
+                current["end"] = i
+                blocks.append(current)
+                current = None
+            continue
+        start = _COMMENT_REGION_START.match(line) or _COMMENT_REGION_BANNER.match(line)
+        if start:
+            if current:
+                current["end"] = i - 1
+                blocks.append(current)
+            current = {"label": start.group(1).strip(), "start": i, "end": len(lines)}
+    if current:
+        blocks.append(current)
+    return [b for b in blocks if b["label"] and b["end"] > b["start"]]
+
+
+def _apply_comment_regions():
+    """Turn `# region Title` / `# --- Title ---` comments into Unity Region frames."""
+    if not _node_source_lines:
+        return
+    already = set()
+    for rec in _region_records:
+        already.update(rec["members"])
+        already.add(rec["sid"])
+
+    by_path = {}
+    for sid, (path, lineno) in _node_source_lines.items():
+        by_path.setdefault(path, []).append((sid, lineno))
+
+    for path, entries in by_path.items():
+        for block in _parse_comment_regions(path):
+            members = [
+                sid
+                for sid, lineno in entries
+                if block["start"] < lineno < block["end"] and sid not in already
+            ]
+            if not members:
+                continue
+            begin_region(block["label"])
+            rec = _region_records[-1]
+            rec["members"].update(members)
+            already.update(members)
+            already.add(rec["sid"])
+            end_region()
+
+
+def _fit_region_frames():
+    """Size each Region box around the nodes created inside it (after layout)."""
+    registry = {node["sID"]: node for node in data["serializableNodes"]}
+    for rec in reversed(_region_records):
+        region = registry.get(rec["sid"])
+        if not region or region.get("id") != "Region":
+            continue
+        boxes = []
+        for sid in rec["members"]:
+            node = registry.get(sid)
+            if not node or sid == rec["sid"]:
+                continue
+            transform = node.get("serializableRectTransform")
+            if not transform:
+                continue
+            x, y = _get_layout_position(transform)
+            if node.get("id") == "Region":
+                size = transform.get("sizeDelta") or {}
+                w = size.get("x", _node_size(node)[0])
+                h = size.get("y", _node_size(node)[1])
+            else:
+                w, h = _node_size(node)
+            boxes.append((x, y, w, h))
+        transform = region["serializableRectTransform"]
+        if not boxes:
+            if _is_at_origin(transform):
+                _set_layout_position(transform, _LAYOUT_ORIGIN_X - 80, _LAYOUT_ORIGIN_Y + 80)
+            continue
+        min_x = min(x for x, y, w, h in boxes) - _REGION_PAD_X
+        max_x = max(x + w for x, y, w, h in boxes) + _REGION_PAD_X
+        max_y = max(y for x, y, w, h in boxes) + _REGION_HEADER
+        min_y = min(y - h for x, y, w, h in boxes) - _REGION_PAD_BOTTOM
+        _set_layout_position(transform, min_x, max_y)
+        transform["localPosition"] = Position3(min_x, max_y, 0)
+        transform["anchorMin"] = {"x": 0, "y": 1}
+        transform["anchorMax"] = {"x": 0, "y": 1}
+        transform["sizeDelta"] = {"x": max(160.0, max_x - min_x), "y": max(96.0, max_y - min_y)}
+
+
+_LAYOUT_ORIGIN_X = 1263
+_LAYOUT_ORIGIN_Y = -278
+_LAYOUT_ROOT_IDS = frozenset(
+    {
+        "CreateFunction",
+        "Float",
+        "String",
+        "Bool",
+        "Color",
+        "Country",
+        "GetVariable",
+        "Region",
+    }
+)
+
+
+def _node_size(node):
+    return NODE_SIZES.get(node.get("id", ""), DEFAULT_NODE_SIZE)
+
+
+def _wired_pairs():
+    pairs = []
+    for conn in data["serializableConnections"]:
+        source = findNodeByPortSID(conn["port0SID"])
+        dest = findNodeByPortSID(conn["port1SID"])
+        if source and dest and source["sID"] != dest["sID"]:
+            pairs.append((source, dest))
+    return pairs
+
+
+def _graph_maps(nodes):
+    sids = [node["sID"] for node in nodes]
+    sid_set = set(sids)
+    registry = {node["sID"]: node for node in nodes}
+    succ = {sid: [] for sid in sids}
+    pred = {sid: [] for sid in sids}
+    for source, dest in _wired_pairs():
+        src, dst = source["sID"], dest["sID"]
+        if src in sid_set and dst in sid_set:
+            succ[src].append(dst)
+            pred[dst].append(src)
+    return registry, succ, pred
+
+
+def _feedback_edges(sids, succ, start_order=None):
+    """DFS back-edges so cyclic graphs (CreateFunction ↔ body) still layer."""
+    white, gray, black = 0, 1, 2
+    color = {sid: white for sid in sids}
+    back = set()
+
+    def dfs(u):
+        color[u] = gray
+        for v in succ[u]:
+            if v not in color:
+                continue
+            if color[v] == gray:
+                back.add((u, v))
+            elif color[v] == white:
+                dfs(v)
+        color[u] = black
+
+    for sid in start_order or sids:
+        if color.get(sid) == white:
+            dfs(sid)
+    return back
+
+
+def _assign_levels(registry, succ, pred):
+    sids = list(registry)
+    start_order = sorted(
+        sids,
+        key=lambda sid: 0 if registry[sid].get("id") in _LAYOUT_ROOT_IDS else 1,
+    )
+    back = _feedback_edges(sids, succ, start_order)
+    dag_succ = {sid: [v for v in succ[sid] if (sid, v) not in back] for sid in sids}
+    dag_pred = {sid: [u for u in pred[sid] if (u, sid) not in back] for sid in sids}
+
+    in_degree = {sid: len(dag_pred[sid]) for sid in sids}
+    queue = deque(sid for sid in sids if in_degree[sid] == 0)
+    if not queue:
+        roots = [sid for sid in sids if registry[sid].get("id") in _LAYOUT_ROOT_IDS]
+        queue.extend(roots or sids[:1])
+        for sid in list(queue):
+            in_degree[sid] = 0
+
+    levels = {}
+    while queue:
+        u = queue.popleft()
+        if u in levels:
+            continue
+        pred_lv = [levels[p] for p in dag_pred[u] if p in levels]
+        levels[u] = max(pred_lv) + 1 if pred_lv else 0
+        for v in dag_succ[u]:
+            in_degree[v] -= 1
+            if in_degree[v] <= 0 and v not in levels:
+                queue.append(v)
+
+    remaining = [sid for sid in sids if sid not in levels]
+    remaining.sort(key=lambda sid: 0 if registry[sid].get("id") in _LAYOUT_ROOT_IDS else 1)
+    while remaining:
+        progressed = False
+        still = []
+        for sid in remaining:
+            pred_lv = [levels[p] for p in pred[sid] if p in levels]
+            if pred_lv:
+                levels[sid] = max(pred_lv) + 1
+                progressed = True
+            else:
+                still.append(sid)
+        if not progressed:
+            nxt = (max(levels.values()) + 1) if levels else 0
+            for sid in still:
+                levels[sid] = nxt
+            break
+        remaining = still
+    return levels
+
+
+def _barycenter_order(columns, succ, pred, passes=4):
+    if len(columns) < 2:
+        return columns
+    for i in range(passes):
+        if i % 2 == 0:
+            for c in range(1, len(columns)):
+                index_of = {sid: n for n, sid in enumerate(columns[c - 1])}
+
+                def key(sid, index_of=index_of, pred=pred):
+                    vals = [index_of[p] for p in pred[sid] if p in index_of]
+                    return (sum(vals) / len(vals) if vals else len(index_of), sid)
+
+                columns[c].sort(key=key)
+        else:
+            for c in range(len(columns) - 2, -1, -1):
+                index_of = {sid: n for n, sid in enumerate(columns[c + 1])}
+
+                def key(sid, index_of=index_of, succ=succ):
+                    vals = [index_of[v] for v in succ[sid] if v in index_of]
+                    return (sum(vals) / len(vals) if vals else len(index_of), sid)
+
+                columns[c].sort(key=key)
+    return columns
+
+
+def _place_columns(columns, registry, gap_x, gap_y, origin_x, origin_y, force=False):
+    """Place layered columns using real node sizes. Y grows downward (negative)."""
+    current_x = origin_x
+    for sids in columns:
+        widths = [_node_size(registry[sid])[0] for sid in sids]
+        heights = [_node_size(registry[sid])[1] for sid in sids]
+        col_width = max(widths, default=DEFAULT_NODE_SIZE[0])
+        total_h = sum(heights) + gap_y * max(0, len(sids) - 1)
+        current_y = origin_y + total_h / 2.0
+        for sid, height in zip(sids, heights):
+            node = registry[sid]
+            transform = node["serializableRectTransform"]
+            if force or _is_at_origin(transform):
+                _set_layout_position(transform, current_x, current_y)
+            current_y -= height + gap_y
+        current_x += col_width + gap_x
+
+
+def _hierarchical_layout(nodes, origin_x, origin_y, gap_x, gap_y, force=False):
+    if not nodes:
+        return
+    registry, succ, pred = _graph_maps(nodes)
+    levels = _assign_levels(registry, succ, pred)
+    by_level = {}
+    for sid, level in levels.items():
+        by_level.setdefault(level, []).append(sid)
+    columns = [by_level[level] for level in sorted(by_level)]
+    _barycenter_order(columns, succ, pred)
+    _place_columns(columns, registry, gap_x, gap_y, origin_x, origin_y, force=force)
+
+
+def _layout_node_groups():
+    main = []
+    owned = {}
+    for node in data["serializableNodes"]:
+        if node.get("id") == "Region":
+            continue
+        owner = node.get("ownerFunctionSID")
+        if owner:
+            owned.setdefault(owner, []).append(node)
+        else:
+            main.append(node)
+    return main, owned
+
+
+def _apply_hierarchical_layout(gap_x=96, gap_y=40):
+    """Size-aware Sugiyama layout. Function bodies sit to the right of the main graph."""
+    main, owned = _layout_node_groups()
+    _hierarchical_layout(main, _LAYOUT_ORIGIN_X, _LAYOUT_ORIGIN_Y, gap_x, gap_y)
+
+    body_x = _LAYOUT_ORIGIN_X
+    for node in main:
+        x, _ = _get_layout_position(node["serializableRectTransform"])
+        w, _ = _node_size(node)
+        body_x = max(body_x, x + w)
+    body_x += gap_x
+
+    registry = {node["sID"]: node for node in data["serializableNodes"]}
+    for owner_sid, body in owned.items():
+        owner = registry.get(owner_sid)
+        if owner:
+            _, origin_y = _get_layout_position(owner["serializableRectTransform"])
+        else:
+            origin_y = _LAYOUT_ORIGIN_Y
+        _hierarchical_layout(body, body_x, origin_y, gap_x, gap_y)
+        for node in body:
+            x, _ = _get_layout_position(node["serializableRectTransform"])
+            w, _ = _node_size(node)
+            body_x = max(body_x, x + w + gap_x)
+
+    _repack_region_clusters(gap_x, gap_y)
+
+
+def _innermost_region_ids():
+    inner = {}
+    for rec in _region_records:
+        for sid in rec["members"]:
+            inner[sid] = rec["sid"]
+    return inner
+
+
+def _repack_region_clusters(gap_x, gap_y):
+    """Keep data-flow placement, then pack each Region's nodes into a tight block."""
+    inner = _innermost_region_ids()
+    if not inner:
+        return
+    clusters = {}
+    for node in data["serializableNodes"]:
+        if node.get("id") == "Region":
+            continue
+        rid = inner.get(node["sID"])
+        if rid:
+            clusters.setdefault(rid, []).append(node)
+    for nodes in clusters.values():
+        if len(nodes) < 2:
+            continue
+        xs, ys = [], []
+        for node in nodes:
+            x, y = _get_layout_position(node["serializableRectTransform"])
+            xs.append(x)
+            ys.append(y)
+        _hierarchical_layout(
+            nodes, min(xs), sum(ys) / len(ys), gap_x, gap_y, force=True
+        )
+
+
+def _neighbor_sets():
+    neighbors = {}
+    for source, dest in _wired_pairs():
+        src, dst = source["sID"], dest["sID"]
+        neighbors.setdefault(src, set()).add(dst)
+        neighbors.setdefault(dst, set()).add(src)
+    return neighbors
+
+
+def _tighten_layout_to_neighbors(
+    iterations=3, blend=0.4, max_step=280.0, movable_sids=None
+):
+    """Pull nodes toward wired neighbors (titaniummachine1 spatial visualizer)."""
+    neighbors = _neighbor_sets()
+    for _ in range(iterations):
+        positions = {}
+        movable = []
+        for node in data["serializableNodes"]:
+            transform = node.get("serializableRectTransform")
+            if not transform:
+                continue
+            positions[node["sID"]] = _get_layout_position(transform)
+            if node.get("id") == "Region":
+                continue
+            if movable_sids is None or node["sID"] in movable_sids:
+                movable.append(node)
+        if len(positions) < 2:
+            return
+        updated = dict(positions)
+        for node in movable:
+            sid = node["sID"]
+            nbrs = [positions[n] for n in neighbors.get(sid, ()) if n in positions]
+            if not nbrs:
+                continue
+            cx = sum(p[0] for p in nbrs) / len(nbrs)
+            cy = sum(p[1] for p in nbrs) / len(nbrs)
+            ox, oy = positions[sid]
+            nx = ox + blend * (cx - ox)
+            ny = oy + blend * (cy - oy)
+            dx, dy = nx - ox, ny - oy
+            step = math.hypot(dx, dy)
+            if step > max_step:
+                scale = max_step / step
+                nx = ox + dx * scale
+                ny = oy + dy * scale
+            updated[sid] = (nx, ny)
+        for node in movable:
+            x, y = updated[node["sID"]]
+            _set_layout_position(node["serializableRectTransform"], x, y)
+
+
+def _resolve_overlaps(padding=16, passes=20, movable_sids=None):
+    """Separate overlapping nodes after neighbor tightening."""
+    items = []
+    for node in data["serializableNodes"]:
+        transform = node.get("serializableRectTransform")
+        if not transform:
+            continue
+        if node.get("id") == "Region":
+            continue
+        if movable_sids is not None and node["sID"] not in movable_sids:
+            continue
+        w, h = _node_size(node)
+        items.append((node, w, h))
+    if len(items) < 2:
+        return
+    for _ in range(passes):
+        moved = False
+        for i in range(len(items)):
+            node_a, wa, ha = items[i]
+            ax, ay = _get_layout_position(node_a["serializableRectTransform"])
+            for j in range(i + 1, len(items)):
+                node_b, wb, hb = items[j]
+                bx, by = _get_layout_position(node_b["serializableRectTransform"])
+                overlap_x = min(ax + wa, bx + wb) - max(ax, bx) + padding
+                overlap_y = min(ay, by) - max(ay - ha, by - hb) + padding
+                if overlap_x <= 0 or overlap_y <= 0:
+                    continue
+                if overlap_x < overlap_y:
+                    if bx >= ax:
+                        bx = ax + wa + padding
+                    else:
+                        ax = bx + wb + padding
+                else:
+                    if ay >= by:
+                        by = ay - ha - padding
+                    else:
+                        ay = by - hb - padding
+                _set_layout_position(node_a["serializableRectTransform"], ax, ay)
+                _set_layout_position(node_b["serializableRectTransform"], bx, by)
+                moved = True
+        if not moved:
+            break
+
+
 def gridLayout(offsetX=350, offsetY=-215):
-    x = 1263
-    y = -278
+    x = _LAYOUT_ORIGIN_X
+    y = _LAYOUT_ORIGIN_Y
     nodesPerRow = max(1, int(math.sqrt(len(data["serializableNodes"]))))
 
     for i, node in enumerate(data["serializableNodes"]):
+        if node.get("id") == "Region":
+            continue
         transform = node["serializableRectTransform"]
         if not _is_at_origin(transform):
             continue
         _set_layout_position(transform, x, y)
         x += offsetX
         if (i + 1) % nodesPerRow == 0:
-            x = 1263
+            x = _LAYOUT_ORIGIN_X
             y += offsetY
 
 
 def autoLayout(offsetX=350, offsetY=-215):
-    adj = {}
-    inDegree = {}
+    """Default visualizer: size-aware hierarchical layout with crossing reduction."""
+    movable = {
+        node["sID"]
+        for node in data["serializableNodes"]
+        if _is_at_origin(node["serializableRectTransform"])
+    }
+    gap_x = max(48, offsetX - DEFAULT_NODE_SIZE[0])
+    gap_y = max(24, abs(offsetY) - DEFAULT_NODE_SIZE[1])
+    _apply_hierarchical_layout(gap_x=gap_x, gap_y=gap_y)
+    _resolve_overlaps(movable_sids=movable)
 
-    for node in data["serializableNodes"]:
-        adj[node["sID"]] = []
-        inDegree[node["sID"]] = 0
 
-    for conn in data["serializableConnections"]:
-        sourceNode = findNodeByPortSID(conn["port0SID"])
-        destNode = findNodeByPortSID(conn["port1SID"])
-
-        if sourceNode and destNode and sourceNode["sID"] != destNode["sID"]:
-            adj[sourceNode["sID"]].append(destNode["sID"])
-            inDegree[destNode["sID"]] += 1
-
-    queue = deque()
-    for nodeSID, degree in inDegree.items():
-        if degree == 0:
-            queue.append(nodeSID)
-
-    nodeRegistry = {node["sID"]: node for node in data["serializableNodes"]}
-
-    nodeLevels = {nodeSID: 0 for nodeSID in nodeRegistry.keys()}
-    visitedCount = 0
-
-    while queue:
-        u = queue.popleft()
-        visitedCount += 1
-
-        for v in adj[u]:
-            nodeLevels[v] = max(nodeLevels[v], nodeLevels[u] + 1)
-            inDegree[v] -= 1
-            if inDegree[v] == 0:
-                queue.append(v)
-
-    if visitedCount < len(data["serializableNodes"]):
-        gridLayout(offsetX, offsetY)
-        return
-
-    columns = {}
-    for nodeSID, level in nodeLevels.items():
-        if level not in columns:
-            columns[level] = []
-        columns[level].append(nodeRegistry[nodeSID])
-
-    sortedColumns = sorted(columns.items())
-
-    currentX = 1263
-    for level, nodesInColumn in sortedColumns:
-        totalHeight = (len(nodesInColumn) - 1) * offsetY
-        currentY = -totalHeight / 2.0 - 278
-
-        for node in nodesInColumn:
-            transform = node["serializableRectTransform"]
-            if not _is_at_origin(transform):
-                continue
-            _set_layout_position(transform, currentX, currentY)
-            currentY += offsetY
-
-        currentX += offsetX
+def terminatorLayout(offsetX=280, offsetY=-140):
+    """Compact neighbor-tightened layout (titaniummachine1 spatial visualizer)."""
+    movable = {
+        node["sID"]
+        for node in data["serializableNodes"]
+        if _is_at_origin(node["serializableRectTransform"])
+    }
+    gap_x = max(28, offsetX - DEFAULT_NODE_SIZE[0])
+    gap_y = max(12, abs(offsetY) - DEFAULT_NODE_SIZE[1])
+    _apply_hierarchical_layout(gap_x=gap_x, gap_y=gap_y)
+    _tighten_layout_to_neighbors(
+        iterations=3, blend=0.32, max_step=220.0, movable_sids=movable
+    )
+    _resolve_overlaps(movable_sids=movable)
 
 
 def updateConnectionLinePoints():
@@ -848,16 +1338,20 @@ def removeUnusedNodes():
 
 def SaveData(
     filePath,
-    layout: Literal["auto", "grid", "single", None] = "auto",
+    layout: Literal["auto", "terminator", "grid", "single", None] = "auto",
     pruneUnusedNodes=True,
     keepPosition=True,
 ):
+    _apply_comment_regions()
+
     if pruneUnusedNodes:
         removeUnusedNodes()
 
     match layout:
         case "auto":
             autoLayout()
+        case "terminator":
+            terminatorLayout()
         case "grid":
             gridLayout()
         case "single":
@@ -867,6 +1361,7 @@ def SaveData(
                     continue
                 _set_layout_position(transform, 0, 0)
 
+    _fit_region_frames()
     updateConnectionLinePoints()
     _prepare_for_unity_format()
 
